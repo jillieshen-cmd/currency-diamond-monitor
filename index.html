@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Currency ÷ Diamond Ratio Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #090b10;
+    --bg2: #0d1018;
+    --bg3: #131720;
+    --border: #1e2535;
+    --border2: #2a3448;
+    --text: #c8d4e8;
+    --text2: #6b7fa0;
+    --text3: #3d4f6e;
+    --accent: #4fc3f7;
+    --accent2: #ce93d8;
+    --green: #69f0ae;
+    --red: #ef5350;
+    --yellow: #ffca28;
+    --orange: #ff8a65;
+    --cur-colors-AUD: #4fc3f7;
+    --cur-colors-HKD: #ce93d8;
+    --cur-colors-JPY: #69f0ae;
+    --cur-colors-MYR: #ffca28;
+    --cur-colors-SGD: #ff8a65;
+    --cur-colors-TWD: #f06292;
+    --cur-colors-USD: #80cbc4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* GRID TEXTURE */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,195,247,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,195,247,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .container { position: relative; z-index: 1; max-width: 1440px; margin: 0 auto; padding: 0 16px 40px; }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 24px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-left {}
+  .header-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+  }
+  .header-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 4px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .header-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .ctrl-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  select {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7fa0'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+  }
+  select:hover { border-color: var(--accent); }
+  select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79,195,247,0.15); }
+
+  /* SUMMARY CARDS */
+  .summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 900px) { .summary-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .summary-row { grid-template-columns: 1fr; } }
+
+  .kpi-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  .kpi-card.alt::before { background: linear-gradient(90deg, var(--accent2), transparent); }
+  .kpi-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .kpi-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+  }
+  .kpi-unit {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text2);
+    margin-top: 4px;
+  }
+  .kpi-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    margin-top: 6px;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .kpi-delta.pos { color: var(--green); background: rgba(105,240,174,0.1); }
+  .kpi-delta.neg { color: var(--red); background: rgba(239,83,80,0.1); }
+
+  /* CHARTS GRID */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
+
+  .chart-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    position: relative;
+  }
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+  .chart-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .chart-formula {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    margin-top: 3px;
+  }
+  .chart-stat {
+    text-align: right;
+  }
+  .chart-stat-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .chart-stat-lbl {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+  }
+  .chart-wrap { position: relative; height: 200px; }
+
+  /* ANOMALY TABLE */
+  .anomaly-section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .anomaly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .anomaly-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .anomaly-count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--red);
+    background: rgba(239,83,80,0.1);
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .anomaly-table-wrap { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+  }
+  thead th {
+    padding: 8px 12px;
+    text-align: left;
+    color: var(--text3);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr {
+    border-bottom: 1px solid rgba(30,37,53,0.7);
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: rgba(79,195,247,0.04); }
+  tbody td {
+    padding: 8px 12px;
+    white-space: nowrap;
+    color: var(--text2);
+  }
+  td.anomaly-date { color: var(--text); }
+  td.anomaly-cur { }
+  td.anomaly-zscore { color: var(--red); font-weight: 500; }
+  td.anomaly-val { color: var(--accent); }
+  td.anomaly-type { }
+  .no-anomalies {
+    padding: 32px;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* AI ANALYSIS */
+  .ai-section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ai-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .ai-btn {
+    background: rgba(79,195,247,0.1);
+    border: 1px solid rgba(79,195,247,0.3);
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  .ai-btn:hover { background: rgba(79,195,247,0.2); border-color: var(--accent); }
+  .ai-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ai-body {
+    padding: 16px;
+    min-height: 80px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text2);
+  }
+  .ai-body.loading { color: var(--text3); }
+  .ai-body p { margin-bottom: 10px; }
+  .ai-body strong { color: var(--text); font-weight: 500; }
+
+  /* CURRENCY BADGES */
+  .cur-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .cur-AUD { color: #4fc3f7; background: rgba(79,195,247,0.1); }
+  .cur-HKD { color: #ce93d8; background: rgba(206,147,216,0.1); }
+  .cur-JPY { color: #69f0ae; background: rgba(105,240,174,0.1); }
+  .cur-MYR { color: #ffca28; background: rgba(255,202,40,0.1); }
+  .cur-SGD { color: #ff8a65; background: rgba(255,138,101,0.1); }
+  .cur-TWD { color: #f06292; background: rgba(240,98,146,0.1); }
+  .cur-USD { color: #80cbc4; background: rgba(128,203,196,0.1); }
+
+  /* LOADING OVERLAY */
+  .loading-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(9,11,16,0.7);
+    backdrop-filter: blur(2px);
+    border-radius: 6px;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .loading-overlay.show { display: flex; }
+  .loading-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: ldot 1s ease-in-out infinite;
+    margin: 0 3px;
+  }
+  .loading-dot:nth-child(2) { animation-delay: 0.15s; }
+  .loading-dot:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes ldot { 0%,100%{opacity:0.2;transform:scale(0.8)} 50%{opacity:1;transform:scale(1)} }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-title">◈ CURRENCY / DIAMOND RATIO MONITOR</div>
+      <div class="header-sub">Livestream Platform · KPI Ratio Analysis · Jan–May 2026</div>
+    </div>
+    <div class="header-controls">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Currency</div>
+        <select id="cur-select">
+          <option value="TWD">TWD</option>
+          <option value="USD">USD</option>
+          <option value="HKD">HKD</option>
+          <option value="JPY">JPY</option>
+          <option value="MYR">MYR</option>
+          <option value="SGD">SGD</option>
+          <option value="AUD">AUD</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">月份</div>
+        <select id="month-select">
+          <option value="all">全部 (Jan–May)</option>
+          <option value="2026-01">2026年1月</option>
+          <option value="2026-02">2026年2月</option>
+          <option value="2026-03">2026年3月</option>
+          <option value="2026-04">2026年4月</option>
+          <option value="2026-05">2026年5月</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Anomaly σ</div>
+        <select id="sigma-select">
+          <option value="1.5">± 1.5σ</option>
+          <option value="2" selected>± 2.0σ</option>
+          <option value="2.5">± 2.5σ</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI SUMMARY CARDS -->
+  <div class="summary-row" id="kpi-cards">
+    <div class="kpi-card">
+      <div class="kpi-label">均值 Avg CPD</div>
+      <div class="kpi-value" id="kpi-avg-cpd">—</div>
+      <div class="kpi-unit" id="kpi-avg-cpd-unit">Currency / Diamond</div>
+    </div>
+    <div class="kpi-card alt">
+      <div class="kpi-label">均值 Avg DPC</div>
+      <div class="kpi-value" id="kpi-avg-dpc">—</div>
+      <div class="kpi-unit" id="kpi-avg-dpc-unit">Diamond / Currency</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">CPD 波動 CV</div>
+      <div class="kpi-value" id="kpi-cv">—</div>
+      <div class="kpi-unit">Coefficient of Variation</div>
+    </div>
+    <div class="kpi-card alt">
+      <div class="kpi-label">異常點數</div>
+      <div class="kpi-value" id="kpi-anomaly-count">—</div>
+      <div class="kpi-unit" id="kpi-anomaly-sigma">at ± 2.0σ threshold</div>
+    </div>
+  </div>
+
+  <!-- CHARTS 2x2 -->
+  <div class="charts-grid">
+    <!-- CPD Trend -->
+    <div class="chart-card">
+      <div class="loading-overlay" id="ld1"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">CPD 趨勢</div>
+          <div class="chart-formula">Currency ÷ Diamond (每顆鑽石的幣別成本)</div>
+        </div>
+        <div class="chart-stat">
+          <div class="chart-stat-val" id="cpd-latest">—</div>
+          <div class="chart-stat-lbl">Latest</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-cpd"></canvas></div>
+    </div>
+
+    <!-- DPC Trend -->
+    <div class="chart-card">
+      <div class="loading-overlay" id="ld2"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">DPC 趨勢</div>
+          <div class="chart-formula">Diamond ÷ Currency (每單位幣別的鑽石數)</div>
+        </div>
+        <div class="chart-stat">
+          <div class="chart-stat-val" id="dpc-latest">—</div>
+          <div class="chart-stat-lbl">Latest</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-dpc"></canvas></div>
+    </div>
+
+    <!-- Z-Score Bar -->
+    <div class="chart-card">
+      <div class="loading-overlay" id="ld3"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">CPD Z-Score 分布</div>
+          <div class="chart-formula">每日偏離均值的標準差倍數</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-zscore"></canvas></div>
+    </div>
+
+    <!-- Scatter -->
+    <div class="chart-card">
+      <div class="loading-overlay" id="ld4"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Diamond vs Currency 散佈</div>
+          <div class="chart-formula">異常點標紅色標記</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-scatter"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ANOMALY TABLE -->
+  <div class="anomaly-section">
+    <div class="anomaly-header">
+      <div class="anomaly-title">⚑ 異常日期清單 (CPD)</div>
+      <div class="anomaly-count" id="anomaly-count-badge">0 筆</div>
+    </div>
+    <div class="anomaly-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Currency</th>
+            <th>CPD</th>
+            <th>Z-Score</th>
+            <th>Diamond</th>
+            <th>Currency Amt</th>
+            <th>方向</th>
+          </tr>
+        </thead>
+        <tbody id="anomaly-tbody"></tbody>
+      </table>
+      <div class="no-anomalies" id="no-anomalies" style="display:none">No anomalies detected at current σ threshold</div>
+    </div>
+  </div>
+
+  <!-- AI ANALYSIS -->
+  <div class="ai-section">
+    <div class="ai-header">
+      <div class="ai-title">⬡ AI 異常解讀</div>
+      <button class="ai-btn" id="ai-btn" onclick="runAiAnalysis()">分析目前幣別</button>
+    </div>
+    <div class="ai-body" id="ai-body">
+      選擇幣別與月份，點擊「分析目前幣別」讓 AI 解讀異常模式與可能成因。
+    </div>
+  </div>
+
+</div>
+
+<script>
+const RATIOS = {"AUD": [{"date": "2026-01-01", "cpd": 0.00344267, "dpc": 290.472571, "diamond": 191099, "currency": 657.89}, {"date": "2026-01-02", "cpd": 0.00357707, "dpc": 279.558192, "diamond": 212987, "currency": 761.87}, {"date": "2026-01-03", "cpd": 0.00356338, "dpc": 280.632799, "diamond": 120094, "currency": 427.94}, {"date": "2026-01-04", "cpd": 0.00332643, "dpc": 300.622917, "diamond": 247094, "currency": 821.94}, {"date": "2026-01-05", "cpd": 0.00311783, "dpc": 320.735635, "diamond": 427191, "currency": 1331.91}, {"date": "2026-01-06", "cpd": 0.0034329, "dpc": 291.299028, "diamond": 40476, "currency": 138.95}, {"date": "2026-01-07", "cpd": 0.00351186, "dpc": 284.749544, "diamond": 76572, "currency": 268.91}, {"date": "2026-01-08", "cpd": 0.00356035, "dpc": 280.871472, "diamond": 40996, "currency": 145.96}, {"date": "2026-01-09", "cpd": 0.00356025, "dpc": 280.879392, "diamond": 172988, "currency": 615.88}, {"date": "2026-01-10", "cpd": 0.00343155, "dpc": 291.413656, "diamond": 285259, "currency": 978.88}, {"date": "2026-01-11", "cpd": 0.00353491, "dpc": 282.892371, "diamond": 165195, "currency": 583.95}, {"date": "2026-01-12", "cpd": 0.00346294, "dpc": 288.772243, "diamond": 87472, "currency": 302.91}, {"date": "2026-01-13", "cpd": 0.00311172, "dpc": 321.365557, "diamond": 433490, "currency": 1348.9}, {"date": "2026-01-14", "cpd": 0.00359954, "dpc": 277.813058, "diamond": 69995, "currency": 251.95}, {"date": "2026-01-15", "cpd": 0.00348563, "dpc": 286.892284, "diamond": 113595, "currency": 395.95}, {"date": "2026-01-16", "cpd": 0.00322875, "dpc": 309.71757, "diamond": 640753, "currency": 2068.83}, {"date": "2026-01-17", "cpd": 0.00350649, "dpc": 285.185185, "diamond": 80696, "currency": 282.96}, {"date": "2026-01-18", "cpd": 0.00352919, "dpc": 283.351078, "diamond": 114437, "currency": 403.87}, {"date": "2026-01-19", "cpd": 0.00355402, "dpc": 281.371449, "diamond": 112799, "currency": 400.89}, {"date": "2026-01-20", "cpd": 0.00347538, "dpc": 287.738699, "diamond": 288553, "currency": 1002.83}, {"date": "2026-01-21", "cpd": 0.00360684, "dpc": 277.25066, "diamond": 85091, "currency": 306.91}, {"date": "2026-01-22", "cpd": 0.00352579, "dpc": 283.624363, "diamond": 210991, "currency": 743.91}, {"date": "2026-01-23", "cpd": 0.00345999, "dpc": 289.017825, "diamond": 120795, "currency": 417.95}, {"date": "2026-01-24", "cpd": 0.00362207, "dpc": 276.085387, "diamond": 107088, "currency": 387.88}, {"date": "2026-01-25", "cpd": 0.00352325, "dpc": 283.828499, "diamond": 104991, "currency": 369.91}, {"date": "2026-01-26", "cpd": 0.00350441, "dpc": 285.354791, "diamond": 196287, "currency": 687.87}, {"date": "2026-01-27", "cpd": 0.00361829, "dpc": 276.373807, "diamond": 83990, "currency": 303.9}, {"date": "2026-01-28", "cpd": 0.00374481, "dpc": 267.03635, "diamond": 58991, "currency": 220.91}, {"date": "2026-01-29", "cpd": 0.00347043, "dpc": 288.149083, "diamond": 232787, "currency": 807.87}, {"date": "2026-01-30", "cpd": 0.00347916, "dpc": 287.425745, "diamond": 237086, "currency": 824.86}, {"date": "2026-01-31", "cpd": 0.00348407, "dpc": 287.020981, "diamond": 96993, "currency": 337.93}, {"date": "2026-02-01", "cpd": 0.0032122, "dpc": 311.313211, "diamond": 1663278, "currency": 5342.78}, {"date": "2026-02-02", "cpd": 0.00351516, "dpc": 284.482145, "diamond": 239790, "currency": 842.9}, {"date": "2026-02-03", "cpd": 0.00368553, "dpc": 271.331276, "diamond": 25497, "currency": 93.97}, {"date": "2026-02-04", "cpd": 0.00346512, "dpc": 288.590183, "diamond": 391285, "currency": 1355.85}, {"date": "2026-02-05", "cpd": 0.0039985, "dpc": 250.093809, "diamond": 31992, "currency": 127.92}, {"date": "2026-02-06", "cpd": 0.00360684, "dpc": 277.25066, "diamond": 85091, "currency": 306.91}, {"date": "2026-02-07", "cpd": 0.00349864, "dpc": 285.825502, "diamond": 269482, "currency": 942.82}, {"date": "2026-02-08", "cpd": 0.00358199, "dpc": 279.174051, "diamond": 114989, "currency": 411.89}, {"date": "2026-02-09", "cpd": 0.00333309, "dpc": 300.021821, "diamond": 164994, "currency": 549.94}, {"date": "2026-02-10", "cpd": 0.00329714, "dpc": 303.2935, "diamond": 166496, "currency": 548.96}, {"date": "2026-02-11", "cpd": 0.00356913, "dpc": 280.18018, "diamond": 84592, "currency": 301.92}, {"date": "2026-02-12", "cpd": 0.00372451, "dpc": 268.491997, "diamond": 25496, "currency": 94.96}, {"date": "2026-02-13", "cpd": 0.00346749, "dpc": 288.392646, "diamond": 146192, "currency": 506.92}, {"date": "2026-02-14", "cpd": 0.00344954, "dpc": 289.893602, "diamond": 99993, "currency": 344.93}, {"date": "2026-02-15", "cpd": 0.00348036, "dpc": 287.326727, "diamond": 187587, "currency": 652.87}, {"date": "2026-02-16", "cpd": 0.00354475, "dpc": 282.107028, "diamond": 95891, "currency": 339.91}, {"date": "2026-02-17", "cpd": 0.00290672, "dpc": 344.029836, "diamond": 875869, "currency": 2545.91}, {"date": "2026-02-18", "cpd": 0.00340559, "dpc": 293.634789, "diamond": 179681, "currency": 611.92}, {"date": "2026-02-19", "cpd": 0.00371602, "dpc": 269.104949, "diamond": 82591, "currency": 306.91}, {"date": "2026-02-20", "cpd": 0.00345627, "dpc": 289.329634, "diamond": 229395, "currency": 792.85}, {"date": "2026-02-21", "cpd": 0.0034916, "dpc": 286.401921, "diamond": 174098, "currency": 607.88}, {"date": "2026-02-22", "cpd": 0.00354647, "dpc": 281.970818, "diamond": 119237, "currency": 422.87}, {"date": "2026-02-23", "cpd": 0.00345111, "dpc": 289.762017, "diamond": 301593, "currency": 1040.83}, {"date": "2026-02-24", "cpd": 0.00360193, "dpc": 277.629265, "diamond": 126288, "currency": 454.88}, {"date": "2026-02-25", "cpd": 0.00350411, "dpc": 285.379137, "diamond": 163488, "currency": 572.88}, {"date": "2026-02-26", "cpd": 0.00340971, "dpc": 293.280144, "diamond": 156594, "currency": 533.94}, {"date": "2026-02-27", "cpd": 0.00351109, "dpc": 284.812159, "diamond": 202191, "currency": 709.91}, {"date": "2026-02-28", "cpd": 0.00347636, "dpc": 287.657458, "diamond": 267182, "currency": 928.82}, {"date": "2026-03-01", "cpd": 0.00349768, "dpc": 285.904203, "diamond": 159789, "currency": 558.89}, {"date": "2026-03-02", "cpd": 0.00352895, "dpc": 283.370378, "diamond": 56096, "currency": 197.96}, {"date": "2026-03-03", "cpd": 0.00353093, "dpc": 283.211246, "diamond": 176687, "currency": 623.87}, {"date": "2026-03-04", "cpd": 0.00361773, "dpc": 276.416432, "diamond": 111089, "currency": 401.89}, {"date": "2026-03-05", "cpd": 0.00358338, "dpc": 279.065821, "diamond": 62494, "currency": 223.94}, {"date": "2026-03-06", "cpd": 0.00361111, "dpc": 276.922907, "diamond": 125687, "currency": 453.87}, {"date": "2026-03-07", "cpd": 0.00351912, "dpc": 284.162063, "diamond": 89494, "currency": 314.94}, {"date": "2026-03-08", "cpd": 0.0034693, "dpc": 288.242362, "diamond": 273493, "currency": 948.83}, {"date": "2026-03-09", "cpd": 0.00351887, "dpc": 284.182481, "diamond": 151995, "currency": 534.85}, {"date": "2026-03-10", "cpd": 0.00350677, "dpc": 285.163022, "diamond": 166789, "currency": 584.89}, {"date": "2026-03-11", "cpd": 0.0036039, "dpc": 277.476887, "diamond": 190585, "currency": 686.85}, {"date": "2026-03-12", "cpd": 0.00346894, "dpc": 288.27221, "diamond": 73495, "currency": 254.95}, {"date": "2026-03-13", "cpd": 0.00344897, "dpc": 289.941935, "diamond": 235688, "currency": 812.88}, {"date": "2026-03-14", "cpd": 0.0034923, "dpc": 286.344227, "diamond": 342671, "currency": 1196.71}, {"date": "2026-03-15", "cpd": 0.00312796, "dpc": 319.696687, "diamond": 428985, "currency": 1341.85}, {"date": "2026-03-16", "cpd": 0.00349215, "dpc": 286.356432, "diamond": 186083, "currency": 649.83}, {"date": "2026-03-17", "cpd": 0.00353789, "dpc": 282.654076, "diamond": 90992, "currency": 321.92}, {"date": "2026-03-18", "cpd": 0.00372636, "dpc": 268.358384, "diamond": 54992, "currency": 204.92}, {"date": "2026-03-19", "cpd": 0.00354605, "dpc": 282.004049, "diamond": 140689, "currency": 498.89}, {"date": "2026-03-20", "cpd": 0.00378993, "dpc": 263.85694, "diamond": 33494, "currency": 126.94}, {"date": "2026-03-21", "cpd": 0.00361501, "dpc": 276.624509, "diamond": 101488, "currency": 366.88}, {"date": "2026-03-22", "cpd": 0.00354366, "dpc": 282.193839, "diamond": 120192, "currency": 425.92}, {"date": "2026-03-23", "cpd": 0.00357954, "dpc": 279.365844, "diamond": 98591, "currency": 352.91}, {"date": "2026-03-24", "cpd": 0.00349779, "dpc": 285.895102, "diamond": 266986, "currency": 933.86}, {"date": "2026-03-25", "cpd": 0.00349028, "dpc": 286.510161, "diamond": 260687, "currency": 909.87}, {"date": "2026-03-26", "cpd": 0.00352965, "dpc": 283.313853, "diamond": 191489, "currency": 675.89}, {"date": "2026-03-27", "cpd": 0.00345886, "dpc": 289.112201, "diamond": 182690, "currency": 631.9}, {"date": "2026-03-28", "cpd": 0.00355084, "dpc": 281.623756, "diamond": 171185, "currency": 607.85}, {"date": "2026-03-29", "cpd": 0.00347683, "dpc": 287.618487, "diamond": 131991, "currency": 458.91}, {"date": "2026-03-30", "cpd": 0.00345286, "dpc": 289.614916, "diamond": 420489, "currency": 1451.89}, {"date": "2026-03-31", "cpd": 0.00348218, "dpc": 287.176281, "diamond": 241185, "currency": 839.85}, {"date": "2026-04-01", "cpd": 0.00346208, "dpc": 288.843335, "diamond": 278988, "currency": 965.88}, {"date": "2026-04-02", "cpd": 0.00340842, "dpc": 293.391088, "diamond": 282785, "currency": 963.85}, {"date": "2026-04-03", "cpd": 0.0035428, "dpc": 282.262365, "diamond": 183129, "currency": 648.79}, {"date": "2026-04-04", "cpd": 0.00344769, "dpc": 290.048925, "diamond": 160661, "currency": 553.91}, {"date": "2026-04-05", "cpd": 0.00353701, "dpc": 282.724667, "diamond": 90732, "currency": 320.92}, {"date": "2026-04-06", "cpd": 0.00350599, "dpc": 285.225999, "diamond": 302833, "currency": 1061.73}, {"date": "2026-04-07", "cpd": 0.00374009, "dpc": 267.373499, "diamond": 82589, "currency": 308.89}, {"date": "2026-04-08", "cpd": 0.00362456, "dpc": 275.895191, "diamond": 250179, "currency": 906.79}, {"date": "2026-04-09", "cpd": 0.00357032, "dpc": 280.086718, "diamond": 105293, "currency": 375.93}, {"date": "2026-04-10", "cpd": 0.00338334, "dpc": 295.56554, "diamond": 192091, "currency": 649.91}, {"date": "2026-04-11", "cpd": 0.00353348, "dpc": 283.006984, "diamond": 247583, "currency": 874.83}, {"date": "2026-04-12", "cpd": 0.00348349, "dpc": 287.068661, "diamond": 609375, "currency": 2122.75}, {"date": "2026-04-13", "cpd": 0.00358909, "dpc": 278.622464, "diamond": 97490, "currency": 349.9}, {"date": "2026-04-14", "cpd": 0.00359292, "dpc": 278.325073, "diamond": 217884, "currency": 782.84}, {"date": "2026-04-15", "cpd": 0.0034814, "dpc": 287.240541, "diamond": 267082, "currency": 929.82}, {"date": "2026-04-16", "cpd": 0.00341437, "dpc": 292.879722, "diamond": 282585, "currency": 964.85}, {"date": "2026-04-17", "cpd": 0.0037257, "dpc": 268.405901, "diamond": 74590, "currency": 277.9}, {"date": "2026-04-18", "cpd": 0.00344829, "dpc": 289.998495, "diamond": 289085, "currency": 996.85}, {"date": "2026-04-19", "cpd": 0.00362525, "dpc": 275.842894, "diamond": 165183, "currency": 598.83}, {"date": "2026-04-20", "cpd": 0.0033833, "dpc": 295.569429, "diamond": 185591, "currency": 627.91}, {"date": "2026-04-21", "cpd": 0.00356336, "dpc": 280.634279, "diamond": 143087, "currency": 509.87}, {"date": "2026-04-22", "cpd": 0.00352688, "dpc": 283.536707, "diamond": 113392, "currency": 399.92}, {"date": "2026-04-23", "cpd": 0.00352911, "dpc": 283.357568, "diamond": 274769, "currency": 969.69}, {"date": "2026-04-24", "cpd": 0.00345544, "dpc": 289.399047, "diamond": 364883, "currency": 1260.83}, {"date": "2026-04-25", "cpd": 0.00354525, "dpc": 282.067333, "diamond": 264503, "currency": 937.73}, {"date": "2026-04-26", "cpd": 0.00367406, "dpc": 272.178289, "diamond": 45432, "currency": 166.92}, {"date": "2026-04-27", "cpd": 0.00339837, "dpc": 294.2591, "diamond": 403082, "currency": 1369.82}, {"date": "2026-04-28", "cpd": 0.00346673, "dpc": 288.456251, "diamond": 358779, "currency": 1243.79}, {"date": "2026-04-29", "cpd": 0.00353857, "dpc": 282.600185, "diamond": 329184, "currency": 1164.84}, {"date": "2026-04-30", "cpd": 0.00345979, "dpc": 289.035247, "diamond": 652578, "currency": 2257.78}, {"date": "2026-05-01", "cpd": 0.00347221, "dpc": 288.001337, "diamond": 344680, "currency": 1196.8}, {"date": "2026-05-02", "cpd": 0.00350733, "dpc": 285.117134, "diamond": 248280, "currency": 870.8}, {"date": "2026-05-03", "cpd": 0.00354671, "dpc": 281.95151, "diamond": 246076, "currency": 872.76}, {"date": "2026-05-04", "cpd": 0.00334778, "dpc": 298.705206, "diamond": 386187, "currency": 1292.87}, {"date": "2026-05-05", "cpd": 0.00353978, "dpc": 282.503254, "diamond": 206185, "currency": 729.85}, {"date": "2026-05-06", "cpd": 0.00345764, "dpc": 289.21455, "diamond": 261985, "currency": 905.85}, {"date": "2026-05-07", "cpd": 0.00347146, "dpc": 288.063121, "diamond": 168491, "currency": 584.91}, {"date": "2026-05-08", "cpd": 0.00321652, "dpc": 310.895256, "diamond": 622689, "currency": 2002.89}, {"date": "2026-05-09", "cpd": 0.00357299, "dpc": 279.877366, "diamond": 137389, "currency": 490.89}, {"date": "2026-05-10", "cpd": 0.00350933, "dpc": 284.954886, "diamond": 107693, "currency": 377.93}, {"date": "2026-05-11", "cpd": 0.00345581, "dpc": 289.367905, "diamond": 366279, "currency": 1265.79}, {"date": "2026-05-12", "cpd": 0.00337386, "dpc": 296.395974, "diamond": 417287, "currency": 1407.87}, {"date": "2026-05-13", "cpd": 0.00349375, "dpc": 286.225424, "diamond": 468780, "currency": 1637.8}, {"date": "2026-05-14", "cpd": 0.00325493, "dpc": 307.226171, "diamond": 316870, "currency": 1031.39}, {"date": "2026-05-15", "cpd": 0.00340094, "dpc": 294.036178, "diamond": 301046, "currency": 1023.84}, {"date": "2026-05-16", "cpd": 0.00315799, "dpc": 316.657016, "diamond": 524992, "currency": 1657.92}, {"date": "2026-05-17", "cpd": 0.00318785, "dpc": 313.691018, "diamond": 548128, "currency": 1747.35}, {"date": "2026-05-18", "cpd": 0.00326659, "dpc": 306.129401, "diamond": 342369, "currency": 1118.38}, {"date": "2026-05-19", "cpd": 0.00306853, "dpc": 325.889046, "diamond": 564228, "currency": 1731.35}, {"date": "2026-05-20", "cpd": 0.00318322, "dpc": 314.147188, "diamond": 785946, "currency": 2501.84}, {"date": "2026-05-21", "cpd": 0.00341616, "dpc": 292.726255, "diamond": 183071, "currency": 625.4}, {"date": "2026-05-22", "cpd": 0.00301785, "dpc": 331.362043, "diamond": 447130, "currency": 1349.37}, {"date": "2026-05-23", "cpd": 0.00333653, "dpc": 299.712995, "diamond": 210944, "currency": 703.82}, {"date": "2026-05-24", "cpd": 0.00314205, "dpc": 318.263332, "diamond": 458592, "currency": 1440.92}, {"date": "2026-05-25", "cpd": 0.00318001, "dpc": 314.464399, "diamond": 532992, "currency": 1694.92}, {"date": "2026-05-26", "cpd": 0.00342697, "dpc": 291.803148, "diamond": 218972, "currency": 750.41}, {"date": "2026-05-27", "cpd": 0.00335367, "dpc": 298.180811, "diamond": 398462, "currency": 1336.31}, {"date": "2026-05-28", "cpd": 0.00337359, "dpc": 296.419805, "diamond": 652088, "currency": 2199.88}, {"date": "2026-05-29", "cpd": 0.00290451, "dpc": 344.291684, "diamond": 1187252, "currency": 3448.39}, {"date": "2026-05-30", "cpd": 0.00354724, "dpc": 281.908935, "diamond": 304986, "currency": 1081.86}, {"date": "2026-05-31", "cpd": 0.00311772, "dpc": 320.746703, "diamond": 252232, "currency": 786.39}], "HKD": [{"date": "2026-01-01", "cpd": 0.01741197, "dpc": 57.431767, "diamond": 1889651, "currency": 32902.54}, {"date": "2026-01-02", "cpd": 0.01722482, "dpc": 58.055756, "diamond": 1438073, "currency": 24770.55}, {"date": "2026-01-03", "cpd": 0.01731446, "dpc": 57.755191, "diamond": 1006405, "currency": 17425.36}, {"date": "2026-01-04", "cpd": 0.01654104, "dpc": 60.455686, "diamond": 1862179, "currency": 30802.38}, {"date": "2026-01-05", "cpd": 0.01681362, "dpc": 59.475578, "diamond": 2512271, "currency": 42240.38}, {"date": "2026-01-06", "cpd": 0.01665234, "dpc": 60.051621, "diamond": 2701681, "currency": 44989.31}, {"date": "2026-01-07", "cpd": 0.01711513, "dpc": 58.427831, "diamond": 2411673, "currency": 41276.1}, {"date": "2026-01-08", "cpd": 0.01722728, "dpc": 58.047468, "diamond": 1785882, "currency": 30765.89}, {"date": "2026-01-09", "cpd": 0.01718538, "dpc": 58.188988, "diamond": 1593140, "currency": 27378.72}, {"date": "2026-01-10", "cpd": 0.01638328, "dpc": 61.037832, "diamond": 3516901, "currency": 57618.38}, {"date": "2026-01-11", "cpd": 0.01759988, "dpc": 56.818558, "diamond": 802961, "currency": 14132.02}, {"date": "2026-01-12", "cpd": 0.01681465, "dpc": 59.471936, "diamond": 1842619, "currency": 30983.0}, {"date": "2026-01-13", "cpd": 0.01728959, "dpc": 57.838274, "diamond": 1691061, "currency": 29237.75}, {"date": "2026-01-14", "cpd": 0.01677612, "dpc": 59.60854, "diamond": 2842438, "currency": 47685.08}, {"date": "2026-01-15", "cpd": 0.01651036, "dpc": 60.568035, "diamond": 3122665, "currency": 51556.32}, {"date": "2026-01-16", "cpd": 0.01676955, "dpc": 59.631884, "diamond": 3712538, "currency": 62257.6}, {"date": "2026-01-17", "cpd": 0.01770192, "dpc": 56.491062, "diamond": 1831573, "currency": 32422.35}, {"date": "2026-01-18", "cpd": 0.01599415, "dpc": 62.522848, "diamond": 3491344, "currency": 55841.09}, {"date": "2026-01-19", "cpd": 0.01748974, "dpc": 57.176388, "diamond": 2431371, "currency": 42524.04}, {"date": "2026-01-20", "cpd": 0.01706926, "dpc": 58.584865, "diamond": 3091569, "currency": 52770.78}, {"date": "2026-01-21", "cpd": 0.01744182, "dpc": 57.33346, "diamond": 2645418, "currency": 46140.91}, {"date": "2026-01-22", "cpd": 0.01786401, "dpc": 55.978483, "diamond": 1531222, "currency": 27353.76}, {"date": "2026-01-23", "cpd": 0.01811937, "dpc": 55.189555, "diamond": 1148424, "currency": 20808.72}, {"date": "2026-01-24", "cpd": 0.01811755, "dpc": 55.195106, "diamond": 989635, "currency": 17929.76}, {"date": "2026-01-25", "cpd": 0.01798855, "dpc": 55.590918, "diamond": 872833, "currency": 15701.0}, {"date": "2026-01-26", "cpd": 0.01792218, "dpc": 55.79677, "diamond": 1178324, "currency": 21118.14}, {"date": "2026-01-27", "cpd": 0.01811185, "dpc": 55.21247, "diamond": 1114022, "currency": 20177.0}, {"date": "2026-01-28", "cpd": 0.01791435, "dpc": 55.821187, "diamond": 1168525, "currency": 20933.36}, {"date": "2026-01-29", "cpd": 0.01752303, "dpc": 57.067753, "diamond": 1713021, "currency": 30017.32}, {"date": "2026-01-30", "cpd": 0.01735342, "dpc": 57.625521, "diamond": 1817124, "currency": 31533.32}, {"date": "2026-01-31", "cpd": 0.01729374, "dpc": 57.824375, "diamond": 2766199, "currency": 47837.94}, {"date": "2026-02-01", "cpd": 0.01760245, "dpc": 56.810276, "diamond": 1747913, "currency": 30767.55}, {"date": "2026-02-02", "cpd": 0.01798589, "dpc": 55.599143, "diamond": 1372819, "currency": 24691.37}, {"date": "2026-02-03", "cpd": 0.0168561, "dpc": 59.325721, "diamond": 2051910, "currency": 34587.19}, {"date": "2026-02-04", "cpd": 0.01785678, "dpc": 56.001124, "diamond": 1223428, "currency": 21846.49}, {"date": "2026-02-05", "cpd": 0.01793013, "dpc": 55.772036, "diamond": 1517904, "currency": 27216.22}, {"date": "2026-02-06", "cpd": 0.0177448, "dpc": 56.354532, "diamond": 1936198, "currency": 34357.45}, {"date": "2026-02-07", "cpd": 0.01758077, "dpc": 56.880345, "diamond": 1959500, "currency": 34449.51}, {"date": "2026-02-08", "cpd": 0.01828662, "dpc": 54.684784, "diamond": 1016326, "currency": 18585.17}, {"date": "2026-02-09", "cpd": 0.01740065, "dpc": 57.469102, "diamond": 2269914, "currency": 39497.99}, {"date": "2026-02-10", "cpd": 0.0178422, "dpc": 56.046916, "diamond": 1486316, "currency": 26519.14}, {"date": "2026-02-11", "cpd": 0.01806048, "dpc": 55.369511, "diamond": 1738596, "currency": 31399.88}, {"date": "2026-02-12", "cpd": 0.01822687, "dpc": 54.864066, "diamond": 976125, "currency": 17791.7}, {"date": "2026-02-13", "cpd": 0.01792575, "dpc": 55.785665, "diamond": 884740, "currency": 15859.63}, {"date": "2026-02-14", "cpd": 0.01693509, "dpc": 59.048979, "diamond": 2842795, "currency": 48143.0}, {"date": "2026-02-15", "cpd": 0.01746268, "dpc": 57.264967, "diamond": 1663005, "currency": 29040.53}, {"date": "2026-02-16", "cpd": 0.01739181, "dpc": 57.498344, "diamond": 1531615, "currency": 26637.55}, {"date": "2026-02-17", "cpd": 0.01653915, "dpc": 60.462601, "diamond": 2680685, "currency": 44336.25}, {"date": "2026-02-18", "cpd": 0.01566493, "dpc": 63.836855, "diamond": 4379643, "currency": 68606.81}, {"date": "2026-02-19", "cpd": 0.01712544, "dpc": 58.392677, "diamond": 1628817, "currency": 27894.2}, {"date": "2026-02-20", "cpd": 0.01671345, "dpc": 59.832064, "diamond": 2268285, "currency": 37910.86}, {"date": "2026-02-21", "cpd": 0.01785677, "dpc": 56.001169, "diamond": 1621254, "currency": 28950.36}, {"date": "2026-02-22", "cpd": 0.01772825, "dpc": 56.407149, "diamond": 2259491, "currency": 40056.82}, {"date": "2026-02-23", "cpd": 0.01733241, "dpc": 57.695388, "diamond": 2206207, "currency": 38238.88}, {"date": "2026-02-24", "cpd": 0.01803972, "dpc": 55.433221, "diamond": 1196209, "currency": 21579.28}, {"date": "2026-02-25", "cpd": 0.01767662, "dpc": 56.571915, "diamond": 1810415, "currency": 32002.01}, {"date": "2026-02-26", "cpd": 0.0168445, "dpc": 59.366547, "diamond": 2434406, "currency": 41006.36}, {"date": "2026-02-27", "cpd": 0.01782306, "dpc": 56.107089, "diamond": 1541990, "currency": 27482.98}, {"date": "2026-02-28", "cpd": 0.01776856, "dpc": 56.279177, "diamond": 1227616, "currency": 21812.97}, {"date": "2026-03-01", "cpd": 0.01763169, "dpc": 56.716065, "diamond": 1925507, "currency": 33949.94}, {"date": "2026-03-02", "cpd": 0.01782176, "dpc": 56.111181, "diamond": 1175325, "currency": 20946.36}, {"date": "2026-03-03", "cpd": 0.01792317, "dpc": 55.793716, "diamond": 1316412, "currency": 23594.27}, {"date": "2026-03-04", "cpd": 0.01772191, "dpc": 56.427321, "diamond": 1355821, "currency": 24027.74}, {"date": "2026-03-05", "cpd": 0.01718168, "dpc": 58.201542, "diamond": 1927922, "currency": 33124.93}, {"date": "2026-03-06", "cpd": 0.01786981, "dpc": 55.960317, "diamond": 1725993, "currency": 30843.16}, {"date": "2026-03-07", "cpd": 0.01708675, "dpc": 58.524888, "diamond": 3210903, "currency": 54863.89}, {"date": "2026-03-08", "cpd": 0.01683739, "dpc": 59.391632, "diamond": 2390025, "currency": 40241.78}, {"date": "2026-03-09", "cpd": 0.01781745, "dpc": 56.124754, "diamond": 1819885, "currency": 32425.71}, {"date": "2026-03-10", "cpd": 0.01708486, "dpc": 58.531348, "diamond": 1578210, "currency": 26963.5}, {"date": "2026-03-11", "cpd": 0.01720672, "dpc": 58.116815, "diamond": 2313316, "currency": 39804.59}, {"date": "2026-03-12", "cpd": 0.01802551, "dpc": 55.476927, "diamond": 1102321, "currency": 19869.9}, {"date": "2026-03-13", "cpd": 0.01705098, "dpc": 58.647663, "diamond": 1889918, "currency": 32224.95}, {"date": "2026-03-14", "cpd": 0.01628301, "dpc": 61.413721, "diamond": 3941263, "currency": 64175.61}, {"date": "2026-03-15", "cpd": 0.01743524, "dpc": 57.355094, "diamond": 2850890, "currency": 49705.96}, {"date": "2026-03-16", "cpd": 0.01746456, "dpc": 57.258815, "diamond": 1590292, "currency": 27773.75}, {"date": "2026-03-17", "cpd": 0.01794407, "dpc": 55.728726, "diamond": 1140402, "currency": 20463.45}, {"date": "2026-03-18", "cpd": 0.01795942, "dpc": 55.681078, "diamond": 1359615, "currency": 24417.9}, {"date": "2026-03-19", "cpd": 0.01799467, "dpc": 55.572026, "diamond": 1272007, "currency": 22889.34}, {"date": "2026-03-20", "cpd": 0.01805379, "dpc": 55.390046, "diamond": 823532, "currency": 14867.87}, {"date": "2026-03-21", "cpd": 0.01688486, "dpc": 59.224644, "diamond": 2365623, "currency": 39943.22}, {"date": "2026-03-22", "cpd": 0.01599444, "dpc": 62.521731, "diamond": 3373003, "currency": 53949.29}, {"date": "2026-03-23", "cpd": 0.01745482, "dpc": 57.290768, "diamond": 2075106, "currency": 36220.6}, {"date": "2026-03-24", "cpd": 0.01788138, "dpc": 55.92408, "diamond": 1355730, "currency": 24242.33}, {"date": "2026-03-25", "cpd": 0.01755145, "dpc": 56.975362, "diamond": 1205434, "currency": 21157.11}, {"date": "2026-03-26", "cpd": 0.0179113, "dpc": 55.830674, "diamond": 1483804, "currency": 26576.86}, {"date": "2026-03-27", "cpd": 0.01769857, "dpc": 56.501735, "diamond": 1161131, "currency": 20550.36}, {"date": "2026-03-28", "cpd": 0.01789379, "dpc": 55.885313, "diamond": 942237, "currency": 16860.19}, {"date": "2026-03-29", "cpd": 0.01755034, "dpc": 56.978952, "diamond": 1509230, "currency": 26487.5}, {"date": "2026-03-30", "cpd": 0.01793049, "dpc": 55.77093, "diamond": 989934, "currency": 17750.0}, {"date": "2026-03-31", "cpd": 0.01579612, "dpc": 63.306705, "diamond": 3435313, "currency": 54264.6}, {"date": "2026-04-01", "cpd": 0.01675675, "dpc": 59.677454, "diamond": 2645415, "currency": 44328.55}, {"date": "2026-04-02", "cpd": 0.01759393, "dpc": 56.837792, "diamond": 1858024, "currency": 32689.94}, {"date": "2026-04-03", "cpd": 0.01677372, "dpc": 59.617052, "diamond": 2966994, "currency": 49767.54}, {"date": "2026-04-04", "cpd": 0.01803852, "dpc": 55.436936, "diamond": 862209, "currency": 15552.97}, {"date": "2026-04-05", "cpd": 0.017868, "dpc": 55.965969, "diamond": 1898608, "currency": 33924.33}, {"date": "2026-04-06", "cpd": 0.01785813, "dpc": 55.996893, "diamond": 2339217, "currency": 41774.05}, {"date": "2026-04-07", "cpd": 0.01694976, "dpc": 58.997875, "diamond": 2433988, "currency": 41255.52}, {"date": "2026-04-08", "cpd": 0.01784077, "dpc": 56.051387, "diamond": 1709106, "currency": 30491.77}, {"date": "2026-04-09", "cpd": 0.01729307, "dpc": 57.826645, "diamond": 3180100, "currency": 54993.68}, {"date": "2026-04-10", "cpd": 0.01700471, "dpc": 58.807245, "diamond": 2274509, "currency": 38677.36}, {"date": "2026-04-11", "cpd": 0.01790323, "dpc": 55.85583, "diamond": 1283820, "currency": 22984.53}, {"date": "2026-04-12", "cpd": 0.01799066, "dpc": 55.584402, "diamond": 1430205, "currency": 25730.33}, {"date": "2026-04-13", "cpd": 0.01791095, "dpc": 55.831768, "diamond": 1563007, "currency": 27994.94}, {"date": "2026-04-14", "cpd": 0.01706751, "dpc": 58.590859, "diamond": 3574299, "currency": 61004.38}, {"date": "2026-04-15", "cpd": 0.01817544, "dpc": 55.019304, "diamond": 1050439, "currency": 19092.19}, {"date": "2026-04-16", "cpd": 0.01697643, "dpc": 58.905208, "diamond": 2381934, "currency": 40436.73}, {"date": "2026-04-17", "cpd": 0.01486084, "dpc": 67.290944, "diamond": 6471825, "currency": 96176.76}, {"date": "2026-04-18", "cpd": 0.01595521, "dpc": 62.67545, "diamond": 3470722, "currency": 55376.1}, {"date": "2026-04-19", "cpd": 0.01542586, "dpc": 64.826218, "diamond": 7476809, "currency": 115336.19}, {"date": "2026-04-20", "cpd": 0.0156967, "dpc": 63.707662, "diamond": 2850126, "currency": 44737.57}, {"date": "2026-04-21", "cpd": 0.01497807, "dpc": 66.764281, "diamond": 5085235, "currency": 76167.0}, {"date": "2026-04-22", "cpd": 0.017585, "dpc": 56.866635, "diamond": 2136699, "currency": 37573.86}, {"date": "2026-04-23", "cpd": 0.01768029, "dpc": 56.560149, "diamond": 1516601, "currency": 26813.95}, {"date": "2026-04-24", "cpd": 0.01561607, "dpc": 64.036581, "diamond": 6113518, "currency": 95469.15}, {"date": "2026-04-25", "cpd": 0.01733036, "dpc": 57.702221, "diamond": 1674384, "currency": 29017.67}, {"date": "2026-04-26", "cpd": 0.01806587, "dpc": 55.353006, "diamond": 888527, "currency": 16052.01}, {"date": "2026-04-27", "cpd": 0.0164115, "dpc": 60.932872, "diamond": 2071023, "currency": 33988.6}, {"date": "2026-04-28", "cpd": 0.01734696, "dpc": 57.646981, "diamond": 2810009, "currency": 48745.12}, {"date": "2026-04-29", "cpd": 0.01790409, "dpc": 55.853175, "diamond": 1457917, "currency": 26102.67}, {"date": "2026-04-30", "cpd": 0.01790334, "dpc": 55.85549, "diamond": 1331515, "currency": 23838.57}, {"date": "2026-05-01", "cpd": 0.0176454, "dpc": 56.671984, "diamond": 1909588, "currency": 33695.45}, {"date": "2026-05-02", "cpd": 0.01736655, "dpc": 57.581959, "diamond": 2653797, "currency": 46087.3}, {"date": "2026-05-03", "cpd": 0.01745944, "dpc": 57.275594, "diamond": 1731786, "currency": 30236.02}, {"date": "2026-05-04", "cpd": 0.01584808, "dpc": 63.099142, "diamond": 3162806, "currency": 50124.39}, {"date": "2026-05-05", "cpd": 0.01774586, "dpc": 56.351163, "diamond": 1430423, "currency": 25384.09}, {"date": "2026-05-06", "cpd": 0.01609605, "dpc": 62.127043, "diamond": 3930130, "currency": 63259.57}, {"date": "2026-05-07", "cpd": 0.01689753, "dpc": 59.180246, "diamond": 3171396, "currency": 53588.76}, {"date": "2026-05-08", "cpd": 0.01730584, "dpc": 57.783972, "diamond": 1462625, "currency": 25311.95}, {"date": "2026-05-09", "cpd": 0.01656572, "dpc": 60.365632, "diamond": 4290014, "currency": 71067.16}, {"date": "2026-05-10", "cpd": 0.01812434, "dpc": 55.174434, "diamond": 1165822, "currency": 21129.75}, {"date": "2026-05-11", "cpd": 0.01739794, "dpc": 57.478059, "diamond": 2089597, "currency": 36354.69}, {"date": "2026-05-12", "cpd": 0.01733945, "dpc": 57.671947, "diamond": 1918515, "currency": 33266.0}, {"date": "2026-05-13", "cpd": 0.017797, "dpc": 56.189241, "diamond": 1220037, "currency": 21713.0}, {"date": "2026-05-14", "cpd": 0.01858703, "dpc": 53.800963, "diamond": 1130829, "currency": 21018.75}, {"date": "2026-05-15", "cpd": 0.01678275, "dpc": 59.585001, "diamond": 2693108, "currency": 45197.75}, {"date": "2026-05-16", "cpd": 0.0181034, "dpc": 55.238235, "diamond": 1162023, "currency": 21036.57}, {"date": "2026-05-17", "cpd": 0.01732093, "dpc": 57.733624, "diamond": 1411131, "currency": 24442.1}, {"date": "2026-05-18", "cpd": 0.01772026, "dpc": 56.432592, "diamond": 1187116, "currency": 21036.0}, {"date": "2026-05-19", "cpd": 0.01745971, "dpc": 57.274725, "diamond": 1729203, "currency": 30191.38}, {"date": "2026-05-20", "cpd": 0.01672193, "dpc": 59.801701, "diamond": 2178320, "currency": 36425.72}, {"date": "2026-05-21", "cpd": 0.01640678, "dpc": 60.950427, "diamond": 3711611, "currency": 60895.57}, {"date": "2026-05-22", "cpd": 0.01807858, "dpc": 55.314079, "diamond": 757445, "currency": 13693.53}, {"date": "2026-05-23", "cpd": 0.01649141, "dpc": 60.637634, "diamond": 3474229, "currency": 57294.93}, {"date": "2026-05-24", "cpd": 0.01785289, "dpc": 56.013354, "diamond": 823943, "currency": 14709.76}, {"date": "2026-05-25", "cpd": 0.01588499, "dpc": 62.952528, "diamond": 4196916, "currency": 66667.95}, {"date": "2026-05-26", "cpd": 0.01721845, "dpc": 58.07724, "diamond": 1354435, "currency": 23321.27}, {"date": "2026-05-27", "cpd": 0.01795502, "dpc": 55.694728, "diamond": 1320028, "currency": 23701.13}, {"date": "2026-05-28", "cpd": 0.01658026, "dpc": 60.312682, "diamond": 1914336, "currency": 31740.19}, {"date": "2026-05-29", "cpd": 0.01903575, "dpc": 52.532733, "diamond": 649448, "currency": 12362.73}, {"date": "2026-05-30", "cpd": 0.01724246, "dpc": 57.996373, "diamond": 1196337, "currency": 20627.79}, {"date": "2026-05-31", "cpd": 0.01647618, "dpc": 60.69369, "diamond": 3228718, "currency": 53196.93}], "JPY": [{"date": "2026-01-01", "cpd": 0.30494639, "dpc": 3.279265, "diamond": 539767, "currency": 164600.0}, {"date": "2026-01-02", "cpd": 0.3163318, "dpc": 3.161238, "diamond": 63857, "currency": 20200.0}, {"date": "2026-01-03", "cpd": 0.29058076, "dpc": 3.441384, "diamond": 856354, "currency": 248840.0}, {"date": "2026-01-04", "cpd": 0.26110143, "dpc": 3.829929, "diamond": 75756, "currency": 19780.0}, {"date": "2026-01-05", "cpd": 0.35231365, "dpc": 2.83838, "diamond": 200787, "currency": 70740.0}, {"date": "2026-01-06", "cpd": 0.32833519, "dpc": 3.045668, "diamond": 116710, "currency": 38320.0}, {"date": "2026-01-07", "cpd": 0.31074922, "dpc": 3.218029, "diamond": 195270, "currency": 60680.0}, {"date": "2026-01-08", "cpd": 0.35397971, "dpc": 2.825021, "diamond": 136844, "currency": 48440.0}, {"date": "2026-01-09", "cpd": 0.32848645, "dpc": 3.044266, "diamond": 194833, "currency": 64000.0}, {"date": "2026-01-10", "cpd": 0.3358788, "dpc": 2.977264, "diamond": 97952, "currency": 32900.0}, {"date": "2026-01-11", "cpd": 0.34419734, "dpc": 2.90531, "diamond": 326092, "currency": 112240.0}, {"date": "2026-01-12", "cpd": 0.31182336, "dpc": 3.206944, "diamond": 149636, "currency": 46660.0}, {"date": "2026-01-13", "cpd": 0.32958835, "dpc": 3.034088, "diamond": 132711, "currency": 43740.0}, {"date": "2026-01-14", "cpd": 0.33450983, "dpc": 2.989449, "diamond": 138830, "currency": 46440.0}, {"date": "2026-01-15", "cpd": 0.34199845, "dpc": 2.92399, "diamond": 69474, "currency": 23760.0}, {"date": "2026-01-16", "cpd": 0.30362, "dpc": 3.293591, "diamond": 441934, "currency": 134180.0}, {"date": "2026-01-17", "cpd": 0.34698088, "dpc": 2.882003, "diamond": 288892, "currency": 100240.0}, {"date": "2026-01-18", "cpd": 0.36051553, "dpc": 2.773806, "diamond": 168370, "currency": 60700.0}, {"date": "2026-01-19", "cpd": 0.33430939, "dpc": 2.991241, "diamond": 353804, "currency": 118280.0}, {"date": "2026-01-20", "cpd": 0.30375831, "dpc": 3.292091, "diamond": 1109303, "currency": 336960.0}, {"date": "2026-01-21", "cpd": 0.34052779, "dpc": 2.936618, "diamond": 288787, "currency": 98340.0}, {"date": "2026-01-22", "cpd": 0.31439412, "dpc": 3.180721, "diamond": 676568, "currency": 212709.0}, {"date": "2026-01-23", "cpd": 0.33130817, "dpc": 3.018338, "diamond": 202947, "currency": 67238.0}, {"date": "2026-01-24", "cpd": 0.32305514, "dpc": 3.095447, "diamond": 376428, "currency": 121607.0}, {"date": "2026-01-25", "cpd": 0.33609905, "dpc": 2.975313, "diamond": 343973, "currency": 115609.0}, {"date": "2026-01-26", "cpd": 0.29307364, "dpc": 3.412112, "diamond": 911474, "currency": 267129.0}, {"date": "2026-01-27", "cpd": 0.31316052, "dpc": 3.19325, "diamond": 452292, "currency": 141640.0}, {"date": "2026-01-28", "cpd": 0.28039817, "dpc": 3.566357, "diamond": 112112, "currency": 31436.0}, {"date": "2026-01-29", "cpd": 0.33846805, "dpc": 2.954489, "diamond": 231691, "currency": 78420.0}, {"date": "2026-01-30", "cpd": 0.27051738, "dpc": 3.69662, "diamond": 192276, "currency": 52014.0}, {"date": "2026-01-31", "cpd": 0.29835271, "dpc": 3.351738, "diamond": 1045169, "currency": 311829.0}, {"date": "2026-02-01", "cpd": 0.32427777, "dpc": 3.083776, "diamond": 402331, "currency": 130467.0}, {"date": "2026-02-02", "cpd": 0.25816316, "dpc": 3.873519, "diamond": 149452, "currency": 38583.0}, {"date": "2026-02-03", "cpd": 0.31318609, "dpc": 3.19299, "diamond": 408840, "currency": 128043.0}, {"date": "2026-02-04", "cpd": 0.30173585, "dpc": 3.314157, "diamond": 32376, "currency": 9769.0}, {"date": "2026-02-05", "cpd": 0.31681128, "dpc": 3.156453, "diamond": 303231, "currency": 96067.0}, {"date": "2026-02-06", "cpd": 0.35956875, "dpc": 2.781109, "diamond": 69194, "currency": 24880.0}, {"date": "2026-02-07", "cpd": 0.31557093, "dpc": 3.16886, "diamond": 190252, "currency": 60038.0}, {"date": "2026-02-08", "cpd": 0.29165269, "dpc": 3.428736, "diamond": 1019586, "currency": 297365.0}, {"date": "2026-02-09", "cpd": 0.2607826, "dpc": 3.834612, "diamond": 98492, "currency": 25685.0}, {"date": "2026-02-10", "cpd": 0.31740701, "dpc": 3.150529, "diamond": 184328, "currency": 58507.0}, {"date": "2026-02-11", "cpd": 0.19903461, "dpc": 5.024252, "diamond": 91155, "currency": 18143.0}, {"date": "2026-02-12", "cpd": 0.25056056, "dpc": 3.991051, "diamond": 28097, "currency": 7040.0}, {"date": "2026-02-13", "cpd": 0.2860757, "dpc": 3.495578, "diamond": 99610, "currency": 28496.0}, {"date": "2026-02-14", "cpd": 0.34052841, "dpc": 2.936613, "diamond": 375766, "currency": 127959.0}, {"date": "2026-02-15", "cpd": 0.25856728, "dpc": 3.867465, "diamond": 143336, "currency": 37062.0}, {"date": "2026-02-16", "cpd": 0.2883457, "dpc": 3.468059, "diamond": 898432, "currency": 259059.0}, {"date": "2026-02-17", "cpd": 0.28656843, "dpc": 3.489568, "diamond": 123098, "currency": 35276.0}, {"date": "2026-02-18", "cpd": 0.3957991, "dpc": 2.526534, "diamond": 27994, "currency": 11080.0}, {"date": "2026-02-19", "cpd": 0.27389974, "dpc": 3.650971, "diamond": 92501, "currency": 25336.0}, {"date": "2026-02-20", "cpd": 0.29883311, "dpc": 3.346349, "diamond": 131632, "currency": 39336.0}, {"date": "2026-02-21", "cpd": 0.32166274, "dpc": 3.108846, "diamond": 212757, "currency": 68436.0}, {"date": "2026-02-22", "cpd": 0.31138369, "dpc": 3.211472, "diamond": 236830, "currency": 73745.0}, {"date": "2026-02-23", "cpd": 0.28814464, "dpc": 3.470479, "diamond": 284791, "currency": 82061.0}, {"date": "2026-02-24", "cpd": 0.24830464, "dpc": 4.027311, "diamond": 69012, "currency": 17136.0}, {"date": "2026-02-25", "cpd": 0.25418587, "dpc": 3.934129, "diamond": 61636, "currency": 15667.0}, {"date": "2026-02-26", "cpd": 0.27006587, "dpc": 3.7028, "diamond": 105515, "currency": 28496.0}, {"date": "2026-02-27", "cpd": 0.28839492, "dpc": 3.467467, "diamond": 178689, "currency": 51533.0}, {"date": "2026-02-28", "cpd": 0.27413851, "dpc": 3.647791, "diamond": 70924, "currency": 19443.0}, {"date": "2026-03-01", "cpd": 0.25679513, "dpc": 3.894155, "diamond": 83810, "currency": 21522.0}, {"date": "2026-03-02", "cpd": 0.21226176, "dpc": 4.711164, "diamond": 68995, "currency": 14645.0}, {"date": "2026-03-03", "cpd": 0.3196338, "dpc": 3.12858, "diamond": 136428, "currency": 43607.0}, {"date": "2026-03-04", "cpd": 0.33704212, "dpc": 2.966988, "diamond": 193145, "currency": 65098.0}, {"date": "2026-03-05", "cpd": 0.31235085, "dpc": 3.201528, "diamond": 244712, "currency": 76436.0}, {"date": "2026-03-06", "cpd": 0.33751806, "dpc": 2.962804, "diamond": 174444, "currency": 58878.0}, {"date": "2026-03-07", "cpd": 0.32658701, "dpc": 3.061971, "diamond": 249667, "currency": 81538.0}, {"date": "2026-03-08", "cpd": 0.33362398, "dpc": 2.997386, "diamond": 169739, "currency": 56629.0}, {"date": "2026-03-09", "cpd": 0.3254743, "dpc": 3.072439, "diamond": 343978, "currency": 111956.0}, {"date": "2026-03-10", "cpd": 0.34963462, "dpc": 2.860129, "diamond": 148066, "currency": 51769.0}, {"date": "2026-03-11", "cpd": 0.31504811, "dpc": 3.174118, "diamond": 114227, "currency": 35987.0}, {"date": "2026-03-12", "cpd": 0.25250294, "dpc": 3.96035, "diamond": 55235, "currency": 13947.0}, {"date": "2026-03-13", "cpd": 0.36869868, "dpc": 2.712242, "diamond": 202279, "currency": 74580.0}, {"date": "2026-03-14", "cpd": 0.30651641, "dpc": 3.262468, "diamond": 148103, "currency": 45396.0}, {"date": "2026-03-15", "cpd": 0.31747083, "dpc": 3.149896, "diamond": 80042, "currency": 25411.0}, {"date": "2026-03-16", "cpd": 0.30280167, "dpc": 3.302492, "diamond": 117430, "currency": 35558.0}, {"date": "2026-03-17", "cpd": 0.28525562, "dpc": 3.505628, "diamond": 52949, "currency": 15104.0}, {"date": "2026-03-18", "cpd": 0.28141576, "dpc": 3.553461, "diamond": 96711, "currency": 27216.0}, {"date": "2026-03-19", "cpd": 0.29566751, "dpc": 3.382177, "diamond": 143428, "currency": 42407.0}, {"date": "2026-03-20", "cpd": 0.3072218, "dpc": 3.254977, "diamond": 197984, "currency": 60825.0}, {"date": "2026-03-21", "cpd": 0.2517272, "dpc": 3.972554, "diamond": 54134, "currency": 13627.0}, {"date": "2026-03-22", "cpd": 0.33060595, "dpc": 3.024749, "diamond": 180148, "currency": 59558.0}, {"date": "2026-03-23", "cpd": 0.22150666, "dpc": 4.514537, "diamond": 71894, "currency": 15925.0}, {"date": "2026-03-24", "cpd": 0.34170376, "dpc": 2.926512, "diamond": 114570, "currency": 39149.0}, {"date": "2026-03-25", "cpd": 0.28612799, "dpc": 3.494939, "diamond": 137089, "currency": 39225.0}, {"date": "2026-03-26", "cpd": 0.32443567, "dpc": 3.082275, "diamond": 75975, "currency": 24649.0}, {"date": "2026-03-27", "cpd": 0.31768946, "dpc": 3.147728, "diamond": 97951, "currency": 31118.0}, {"date": "2026-03-28", "cpd": 0.32947981, "dpc": 3.035087, "diamond": 131049, "currency": 43178.0}, {"date": "2026-03-29", "cpd": 0.20162677, "dpc": 4.959659, "diamond": 36637, "currency": 7387.0}, {"date": "2026-03-30", "cpd": 0.22227854, "dpc": 4.49886, "diamond": 72994, "currency": 16225.0}, {"date": "2026-03-31", "cpd": 0.36285293, "dpc": 2.755937, "diamond": 44095, "currency": 16000.0}, {"date": "2026-04-01", "cpd": 0.2741956, "dpc": 3.647032, "diamond": 196327, "currency": 53832.0}, {"date": "2026-04-02", "cpd": 0.31625887, "dpc": 3.161967, "diamond": 230754, "currency": 72978.0}, {"date": "2026-04-03", "cpd": 0.29792624, "dpc": 3.356535, "diamond": 259336, "currency": 77263.0}, {"date": "2026-04-04", "cpd": 0.31289522, "dpc": 3.195958, "diamond": 122875, "currency": 38447.0}, {"date": "2026-04-05", "cpd": 0.32047854, "dpc": 3.120334, "diamond": 147364, "currency": 47227.0}, {"date": "2026-04-06", "cpd": 0.32404303, "dpc": 3.08601, "diamond": 660545, "currency": 214045.0}, {"date": "2026-04-07", "cpd": 0.31822576, "dpc": 3.142423, "diamond": 163428, "currency": 52007.0}, {"date": "2026-04-08", "cpd": 0.26333514, "dpc": 3.797442, "diamond": 64735, "currency": 17047.0}, {"date": "2026-04-09", "cpd": 0.35862904, "dpc": 2.788397, "diamond": 145387, "currency": 52140.0}, {"date": "2026-04-10", "cpd": 0.3369526, "dpc": 2.967776, "diamond": 194146, "currency": 65418.0}, {"date": "2026-04-11", "cpd": 0.36306202, "dpc": 2.75435, "diamond": 141188, "currency": 51260.0}, {"date": "2026-04-12", "cpd": 0.3055815, "dpc": 3.272449, "diamond": 207686, "currency": 63465.0}, {"date": "2026-04-13", "cpd": 0.33986579, "dpc": 2.942338, "diamond": 80470, "currency": 27349.0}, {"date": "2026-04-14", "cpd": 0.31445894, "dpc": 3.180065, "diamond": 152729, "currency": 48027.0}, {"date": "2026-04-15", "cpd": 0.31845213, "dpc": 3.140189, "diamond": 107451, "currency": 34218.0}, {"date": "2026-04-16", "cpd": 0.31526307, "dpc": 3.171954, "diamond": 541313, "currency": 170656.0}, {"date": "2026-04-17", "cpd": 0.28989523, "dpc": 3.449522, "diamond": 51253, "currency": 14858.0}, {"date": "2026-04-18", "cpd": 0.31421049, "dpc": 3.18258, "diamond": 146230, "currency": 45947.0}, {"date": "2026-04-19", "cpd": 0.2766491, "dpc": 3.614687, "diamond": 94112, "currency": 26036.0}, {"date": "2026-04-20", "cpd": 0.27080086, "dpc": 3.69275, "diamond": 82112, "currency": 22236.0}, {"date": "2026-04-21", "cpd": 0.32008987, "dpc": 3.124123, "diamond": 52076, "currency": 16669.0}, {"date": "2026-04-22", "cpd": 0.29828289, "dpc": 3.352522, "diamond": 139304, "currency": 41552.0}, {"date": "2026-04-23", "cpd": 0.30605642, "dpc": 3.267371, "diamond": 86850, "currency": 26581.0}, {"date": "2026-04-24", "cpd": 0.32545515, "dpc": 3.07262, "diamond": 449850, "currency": 146406.0}, {"date": "2026-04-25", "cpd": 0.28622137, "dpc": 3.493799, "diamond": 52400, "currency": 14998.0}, {"date": "2026-04-26", "cpd": 0.3234627, "dpc": 3.091547, "diamond": 227037, "currency": 73438.0}, {"date": "2026-04-27", "cpd": 0.36555926, "dpc": 2.735535, "diamond": 69592, "currency": 25440.0}, {"date": "2026-04-28", "cpd": 0.21615619, "dpc": 4.626284, "diamond": 73396, "currency": 15865.0}, {"date": "2026-04-29", "cpd": 0.28519934, "dpc": 3.50632, "diamond": 919094, "currency": 262125.0}, {"date": "2026-04-30", "cpd": 0.32095284, "dpc": 3.115723, "diamond": 781875, "currency": 250945.0}, {"date": "2026-05-01", "cpd": 0.32486489, "dpc": 3.078203, "diamond": 128044, "currency": 41597.0}, {"date": "2026-05-02", "cpd": 0.31703345, "dpc": 3.154241, "diamond": 129551, "currency": 41072.0}, {"date": "2026-05-03", "cpd": 0.29139424, "dpc": 3.431777, "diamond": 154478, "currency": 45014.0}, {"date": "2026-05-04", "cpd": 0.33795887, "dpc": 2.95894, "diamond": 142470, "currency": 48149.0}, {"date": "2026-05-05", "cpd": 0.379448, "dpc": 2.635407, "diamond": 46594, "currency": 17680.0}, {"date": "2026-05-06", "cpd": 0.34987767, "dpc": 2.858142, "diamond": 82969, "currency": 29029.0}, {"date": "2026-05-07", "cpd": 0.3039729, "dpc": 3.289767, "diamond": 107730, "currency": 32747.0}, {"date": "2026-05-08", "cpd": 0.3213899, "dpc": 3.111485, "diamond": 49874, "currency": 16029.0}, {"date": "2026-05-09", "cpd": 0.32579227, "dpc": 3.069441, "diamond": 174025, "currency": 56696.0}, {"date": "2026-05-10", "cpd": 0.30155042, "dpc": 3.316195, "diamond": 65853, "currency": 19858.0}, {"date": "2026-05-11", "cpd": 0.33480699, "dpc": 2.986795, "diamond": 80073, "currency": 26809.0}, {"date": "2026-05-12", "cpd": 0.32795825, "dpc": 3.049169, "diamond": 50976, "currency": 16718.0}, {"date": "2026-05-13", "cpd": 0.29550231, "dpc": 3.384068, "diamond": 61854, "currency": 18278.0}, {"date": "2026-05-14", "cpd": 0.33722882, "dpc": 2.965346, "diamond": 169170, "currency": 57049.0}, {"date": "2026-05-15", "cpd": 0.31718892, "dpc": 3.152695, "diamond": 108727, "currency": 34487.0}, {"date": "2026-05-16", "cpd": 0.31578521, "dpc": 3.166709, "diamond": 605041, "currency": 191063.0}, {"date": "2026-05-17", "cpd": 0.3038346, "dpc": 3.291264, "diamond": 489829, "currency": 148827.0}, {"date": "2026-05-18", "cpd": 0.3079592, "dpc": 3.247183, "diamond": 1000100, "currency": 307990.0}, {"date": "2026-05-19", "cpd": 0.30208182, "dpc": 3.310361, "diamond": 414252, "currency": 125138.0}, {"date": "2026-05-20", "cpd": 0.29380021, "dpc": 3.403674, "diamond": 89132, "currency": 26187.0}, {"date": "2026-05-21", "cpd": 0.33234732, "dpc": 3.0089, "diamond": 120350, "currency": 39998.0}, {"date": "2026-05-22", "cpd": 0.30707259, "dpc": 3.256559, "diamond": 112830, "currency": 34647.0}, {"date": "2026-05-23", "cpd": 0.29960479, "dpc": 3.33773, "diamond": 71354, "currency": 21378.0}, {"date": "2026-05-24", "cpd": 0.36481876, "dpc": 2.741087, "diamond": 81191, "currency": 29620.0}, {"date": "2026-05-25", "cpd": 0.25774404, "dpc": 3.879818, "diamond": 39256, "currency": 10118.0}, {"date": "2026-05-26", "cpd": 0.31619014, "dpc": 3.162654, "diamond": 273753, "currency": 86558.0}, {"date": "2026-05-27", "cpd": 0.30351372, "dpc": 3.294744, "diamond": 77354, "currency": 23478.0}, {"date": "2026-05-28", "cpd": 0.32680051, "dpc": 3.059971, "diamond": 98375, "currency": 32149.0}, {"date": "2026-05-29", "cpd": 0.33081241, "dpc": 3.022861, "diamond": 58973, "currency": 19509.0}, {"date": "2026-05-30", "cpd": 0.33369011, "dpc": 2.996792, "diamond": 897848, "currency": 299603.0}, {"date": "2026-05-31", "cpd": 0.29706725, "dpc": 3.366241, "diamond": 457489, "currency": 135905.0}], "MYR": [{"date": "2026-01-01", "cpd": 0.01059285, "dpc": 94.403287, "diamond": 993689, "currency": 10526.0}, {"date": "2026-01-02", "cpd": 0.01047922, "dpc": 95.426995, "diamond": 1236543, "currency": 12958.0}, {"date": "2026-01-03", "cpd": 0.01099457, "dpc": 90.953961, "diamond": 1047062, "currency": 11512.0}, {"date": "2026-01-04", "cpd": 0.01067753, "dpc": 93.654613, "diamond": 836523, "currency": 8932.0}, {"date": "2026-01-05", "cpd": 0.01073862, "dpc": 93.12182, "diamond": 812581, "currency": 8726.0}, {"date": "2026-01-06", "cpd": 0.01018163, "dpc": 98.216085, "diamond": 1009956, "currency": 10283.0}, {"date": "2026-01-07", "cpd": 0.01099398, "dpc": 90.958839, "diamond": 1034202, "currency": 11370.0}, {"date": "2026-01-08", "cpd": 0.01086914, "dpc": 92.003597, "diamond": 895103, "currency": 9729.0}, {"date": "2026-01-09", "cpd": 0.01057001, "dpc": 94.607304, "diamond": 1259034, "currency": 13308.0}, {"date": "2026-01-10", "cpd": 0.01111686, "dpc": 89.953461, "diamond": 840795, "currency": 9347.0}, {"date": "2026-01-11", "cpd": 0.01063583, "dpc": 94.021822, "diamond": 909097, "currency": 9669.0}, {"date": "2026-01-12", "cpd": 0.01080453, "dpc": 92.553812, "diamond": 831596, "currency": 8985.0}, {"date": "2026-01-13", "cpd": 0.0106947, "dpc": 93.504296, "diamond": 1142716, "currency": 12221.0}, {"date": "2026-01-14", "cpd": 0.01081135, "dpc": 92.495366, "diamond": 778441, "currency": 8416.0}, {"date": "2026-01-15", "cpd": 0.01063414, "dpc": 94.036763, "diamond": 1028292, "currency": 10935.0}, {"date": "2026-01-16", "cpd": 0.01079349, "dpc": 92.648413, "diamond": 901747, "currency": 9733.0}, {"date": "2026-01-17", "cpd": 0.01079974, "dpc": 92.594803, "diamond": 840946, "currency": 9082.0}, {"date": "2026-01-18", "cpd": 0.01078272, "dpc": 92.740982, "diamond": 982127, "currency": 10590.0}, {"date": "2026-01-19", "cpd": 0.01067822, "dpc": 93.64855, "diamond": 1026950, "currency": 10966.0}, {"date": "2026-01-20", "cpd": 0.01075253, "dpc": 93.001397, "diamond": 1265098, "currency": 13603.0}, {"date": "2026-01-21", "cpd": 0.01026291, "dpc": 97.438285, "diamond": 1186506, "currency": 12177.0}, {"date": "2026-01-22", "cpd": 0.01042375, "dpc": 95.934773, "diamond": 897182, "currency": 9352.0}, {"date": "2026-01-23", "cpd": 0.01048212, "dpc": 95.400543, "diamond": 1054653, "currency": 11055.0}, {"date": "2026-01-24", "cpd": 0.01030845, "dpc": 97.007812, "diamond": 1005874, "currency": 10369.0}, {"date": "2026-01-25", "cpd": 0.00990927, "dpc": 100.915572, "diamond": 1506064, "currency": 14924.0}, {"date": "2026-01-26", "cpd": 0.01024246, "dpc": 97.632768, "diamond": 777645, "currency": 7965.0}, {"date": "2026-01-27", "cpd": 0.00992642, "dpc": 100.741295, "diamond": 847738, "currency": 8415.0}, {"date": "2026-01-28", "cpd": 0.01017019, "dpc": 98.326587, "diamond": 889069, "currency": 9042.0}, {"date": "2026-01-29", "cpd": 0.01017592, "dpc": 98.271223, "diamond": 855451, "currency": 8705.0}, {"date": "2026-01-30", "cpd": 0.01054599, "dpc": 94.822788, "diamond": 789779, "currency": 8329.0}, {"date": "2026-01-31", "cpd": 0.01017086, "dpc": 98.320149, "diamond": 790494, "currency": 8040.0}, {"date": "2026-02-01", "cpd": 0.01073695, "dpc": 93.136348, "diamond": 805350, "currency": 8647.0}, {"date": "2026-02-02", "cpd": 0.01033624, "dpc": 96.746939, "diamond": 1390834, "currency": 14376.0}, {"date": "2026-02-03", "cpd": 0.01037311, "dpc": 96.403068, "diamond": 986589, "currency": 10234.0}, {"date": "2026-02-04", "cpd": 0.01016641, "dpc": 98.363181, "diamond": 745888, "currency": 7583.0}, {"date": "2026-02-05", "cpd": 0.01034106, "dpc": 96.701871, "diamond": 987036, "currency": 10207.0}, {"date": "2026-02-06", "cpd": 0.01039733, "dpc": 96.178555, "diamond": 854835, "currency": 8888.0}, {"date": "2026-02-07", "cpd": 0.01081315, "dpc": 92.479989, "diamond": 658550, "currency": 7121.0}, {"date": "2026-02-08", "cpd": 0.0104914, "dpc": 95.316178, "diamond": 1483501, "currency": 15564.0}, {"date": "2026-02-09", "cpd": 0.01030364, "dpc": 97.053046, "diamond": 1011778, "currency": 10425.0}, {"date": "2026-02-10", "cpd": 0.01018887, "dpc": 98.146331, "diamond": 1186491, "currency": 12089.0}, {"date": "2026-02-11", "cpd": 0.01065249, "dpc": 93.874732, "diamond": 1096363, "currency": 11679.0}, {"date": "2026-02-12", "cpd": 0.01032781, "dpc": 96.825982, "diamond": 1086678, "currency": 11223.0}, {"date": "2026-02-13", "cpd": 0.01080906, "dpc": 92.514995, "diamond": 916176, "currency": 9903.0}, {"date": "2026-02-14", "cpd": 0.01032028, "dpc": 96.896598, "diamond": 1224773, "currency": 12640.0}, {"date": "2026-02-15", "cpd": 0.01005683, "dpc": 99.434954, "diamond": 834657, "currency": 8394.0}, {"date": "2026-02-16", "cpd": 0.01045607, "dpc": 95.638186, "diamond": 820480, "currency": 8579.0}, {"date": "2026-02-17", "cpd": 0.00941636, "dpc": 106.19813, "diamond": 919782, "currency": 8661.0}, {"date": "2026-02-18", "cpd": 0.00954616, "dpc": 104.754181, "diamond": 1139935, "currency": 10882.0}, {"date": "2026-02-19", "cpd": 0.00866631, "dpc": 115.389369, "diamond": 1202588, "currency": 10422.0}, {"date": "2026-02-20", "cpd": 0.00929254, "dpc": 107.613197, "diamond": 1135104, "currency": 10548.0}, {"date": "2026-02-21", "cpd": 0.00960322, "dpc": 104.131768, "diamond": 1467529, "currency": 14093.0}, {"date": "2026-02-22", "cpd": 0.01044313, "dpc": 95.756752, "diamond": 1521096, "currency": 15885.0}, {"date": "2026-02-23", "cpd": 0.00986372, "dpc": 101.381612, "diamond": 2064231, "currency": 20361.0}, {"date": "2026-02-24", "cpd": 0.01066935, "dpc": 93.726449, "diamond": 1086477, "currency": 11592.0}, {"date": "2026-02-25", "cpd": 0.01089665, "dpc": 91.771321, "diamond": 2016583, "currency": 21974.0}, {"date": "2026-02-26", "cpd": 0.01051231, "dpc": 95.126547, "diamond": 814854, "currency": 8566.0}, {"date": "2026-02-27", "cpd": 0.01385487, "dpc": 72.176786, "diamond": 1264826, "currency": 17524.0}, {"date": "2026-02-28", "cpd": 0.01043582, "dpc": 95.823766, "diamond": 1358781, "currency": 14180.0}, {"date": "2026-03-01", "cpd": 0.01051049, "dpc": 95.143072, "diamond": 1393846, "currency": 14650.0}, {"date": "2026-03-02", "cpd": 0.01047451, "dpc": 95.469862, "diamond": 1035848, "currency": 10850.0}, {"date": "2026-03-03", "cpd": 0.01023478, "dpc": 97.706081, "diamond": 1100659, "currency": 11265.0}, {"date": "2026-03-04", "cpd": 0.01069146, "dpc": 93.532621, "diamond": 848715, "currency": 9074.0}, {"date": "2026-03-05", "cpd": 0.01013216, "dpc": 98.695626, "diamond": 1320054, "currency": 13375.0}, {"date": "2026-03-06", "cpd": 0.01070827, "dpc": 93.385797, "diamond": 978403, "currency": 10477.0}, {"date": "2026-03-07", "cpd": 0.0100476, "dpc": 99.526304, "diamond": 1377245, "currency": 13838.0}, {"date": "2026-03-08", "cpd": 0.01048733, "dpc": 95.353141, "diamond": 2549743, "currency": 26740.0}, {"date": "2026-03-09", "cpd": 0.00993359, "dpc": 100.668575, "diamond": 949506, "currency": 9432.0}, {"date": "2026-03-10", "cpd": 0.01022012, "dpc": 97.846184, "diamond": 1748707, "currency": 17872.0}, {"date": "2026-03-11", "cpd": 0.01038941, "dpc": 96.251827, "diamond": 1277743, "currency": 13275.0}, {"date": "2026-03-12", "cpd": 0.01072452, "dpc": 93.244307, "diamond": 892721, "currency": 9574.0}, {"date": "2026-03-13", "cpd": 0.01029369, "dpc": 97.146851, "diamond": 962531, "currency": 9908.0}, {"date": "2026-03-14", "cpd": 0.01009895, "dpc": 99.020159, "diamond": 1169032, "currency": 11806.0}, {"date": "2026-03-15", "cpd": 0.0123211, "dpc": 81.161572, "diamond": 1590361, "currency": 19595.0}, {"date": "2026-03-16", "cpd": 0.01023657, "dpc": 97.689012, "diamond": 1126452, "currency": 11531.0}, {"date": "2026-03-17", "cpd": 0.01059793, "dpc": 94.358081, "diamond": 1272230, "currency": 13483.0}, {"date": "2026-03-18", "cpd": 0.01079227, "dpc": 92.658876, "diamond": 844493, "currency": 9114.0}, {"date": "2026-03-19", "cpd": 0.01017968, "dpc": 98.23492, "diamond": 771930, "currency": 7858.0}, {"date": "2026-03-20", "cpd": 0.01008843, "dpc": 99.123495, "diamond": 1086790, "currency": 10964.0}, {"date": "2026-03-21", "cpd": 0.00988197, "dpc": 101.194393, "diamond": 765232, "currency": 7562.0}, {"date": "2026-03-22", "cpd": 0.00957307, "dpc": 104.459712, "diamond": 1007305, "currency": 9643.0}, {"date": "2026-03-23", "cpd": 0.01059184, "dpc": 94.412343, "diamond": 749634, "currency": 7940.0}, {"date": "2026-03-24", "cpd": 0.01033346, "dpc": 96.773035, "diamond": 1142696, "currency": 11808.0}, {"date": "2026-03-25", "cpd": 0.01049348, "dpc": 95.297251, "diamond": 894460, "currency": 9386.0}, {"date": "2026-03-26", "cpd": 0.01032816, "dpc": 96.822701, "diamond": 934920, "currency": 9656.0}, {"date": "2026-03-27", "cpd": 0.01044588, "dpc": 95.731506, "diamond": 845022, "currency": 8827.0}, {"date": "2026-03-28", "cpd": 0.01033754, "dpc": 96.734827, "diamond": 949936, "currency": 9820.0}, {"date": "2026-03-29", "cpd": 0.01024768, "dpc": 97.583086, "diamond": 1020036, "currency": 10453.0}, {"date": "2026-03-30", "cpd": 0.0093303, "dpc": 107.177634, "diamond": 1788366, "currency": 16686.0}, {"date": "2026-03-31", "cpd": 0.00985634, "dpc": 101.457521, "diamond": 874158, "currency": 8616.0}, {"date": "2026-04-01", "cpd": 0.01034618, "dpc": 96.654052, "diamond": 1514569, "currency": 15670.0}, {"date": "2026-04-02", "cpd": 0.00987676, "dpc": 101.247819, "diamond": 1357632, "currency": 13409.0}, {"date": "2026-04-03", "cpd": 0.01021656, "dpc": 97.880312, "diamond": 1545628, "currency": 15791.0}, {"date": "2026-04-04", "cpd": 0.01035574, "dpc": 96.564771, "diamond": 1203873, "currency": 12467.0}, {"date": "2026-04-05", "cpd": 0.01025272, "dpc": 97.535094, "diamond": 875475, "currency": 8976.0}, {"date": "2026-04-06", "cpd": 0.0103883, "dpc": 96.262187, "diamond": 1200582, "currency": 12472.0}, {"date": "2026-04-07", "cpd": 0.01038365, "dpc": 96.305291, "diamond": 1141314, "currency": 11851.0}, {"date": "2026-04-08", "cpd": 0.0104022, "dpc": 96.133547, "diamond": 1466325, "currency": 15253.0}, {"date": "2026-04-09", "cpd": 0.01034675, "dpc": 96.648687, "diamond": 1103728, "currency": 11420.0}, {"date": "2026-04-10", "cpd": 0.01004735, "dpc": 99.528759, "diamond": 932684, "currency": 9371.0}, {"date": "2026-04-11", "cpd": 0.01039176, "dpc": 96.230075, "diamond": 991266, "currency": 10301.0}, {"date": "2026-04-12", "cpd": 0.01057594, "dpc": 94.554233, "diamond": 897887, "currency": 9496.0}, {"date": "2026-04-13", "cpd": 0.01047466, "dpc": 95.468451, "diamond": 959267, "currency": 10048.0}, {"date": "2026-04-14", "cpd": 0.01060019, "dpc": 94.337926, "diamond": 999699, "currency": 10597.0}, {"date": "2026-04-15", "cpd": 0.01071404, "dpc": 93.335471, "diamond": 742297, "currency": 7953.0}, {"date": "2026-04-16", "cpd": 0.01061792, "dpc": 94.180422, "diamond": 1017902, "currency": 10808.0}, {"date": "2026-04-17", "cpd": 0.01032254, "dpc": 96.875364, "diamond": 731409, "currency": 7550.0}, {"date": "2026-04-18", "cpd": 0.00998062, "dpc": 100.194167, "diamond": 1144017, "currency": 11418.0}, {"date": "2026-04-19", "cpd": 0.0106155, "dpc": 94.201866, "diamond": 1019641, "currency": 10824.0}, {"date": "2026-04-20", "cpd": 0.01036473, "dpc": 96.481045, "diamond": 1226660, "currency": 12714.0}, {"date": "2026-04-21", "cpd": 0.01032038, "dpc": 96.895618, "diamond": 1012753, "currency": 10452.0}, {"date": "2026-04-22", "cpd": 0.01008568, "dpc": 99.150522, "diamond": 1690913, "currency": 17054.0}, {"date": "2026-04-23", "cpd": 0.01036241, "dpc": 96.502685, "diamond": 1401798, "currency": 14526.0}, {"date": "2026-04-24", "cpd": 0.01068282, "dpc": 93.608253, "diamond": 1084358, "currency": 11584.0}, {"date": "2026-04-25", "cpd": 0.00981953, "dpc": 101.83783, "diamond": 1340084, "currency": 13159.0}, {"date": "2026-04-26", "cpd": 0.00954338, "dpc": 104.784657, "diamond": 1005304, "currency": 9594.0}, {"date": "2026-04-27", "cpd": 0.00981133, "dpc": 101.922944, "diamond": 1175885, "currency": 11537.0}, {"date": "2026-04-28", "cpd": 0.00909995, "dpc": 109.890723, "diamond": 878906, "currency": 7998.0}, {"date": "2026-04-29", "cpd": 0.0090726, "dpc": 110.221959, "diamond": 1024954, "currency": 9299.0}, {"date": "2026-04-30", "cpd": 0.00945093, "dpc": 105.80971, "diamond": 1434039, "currency": 13553.0}, {"date": "2026-05-01", "cpd": 0.00975654, "dpc": 102.495316, "diamond": 1334694, "currency": 13022.0}, {"date": "2026-05-02", "cpd": 0.009769, "dpc": 102.364626, "diamond": 939912, "currency": 9182.0}, {"date": "2026-05-03", "cpd": 0.01015534, "dpc": 98.470331, "diamond": 1150035, "currency": 11679.0}, {"date": "2026-05-04", "cpd": 0.01011447, "dpc": 98.868213, "diamond": 1360130, "currency": 13757.0}, {"date": "2026-05-05", "cpd": 0.00992078, "dpc": 100.798494, "diamond": 1445652, "currency": 14342.0}, {"date": "2026-05-06", "cpd": 0.01004992, "dpc": 99.503309, "diamond": 1307971, "currency": 13145.0}, {"date": "2026-05-07", "cpd": 0.01040915, "dpc": 96.069282, "diamond": 1182805, "currency": 12312.0}, {"date": "2026-05-08", "cpd": 0.01049608, "dpc": 95.273642, "diamond": 1108223, "currency": 11632.0}, {"date": "2026-05-09", "cpd": 0.01005139, "dpc": 99.488689, "diamond": 831228, "currency": 8355.0}, {"date": "2026-05-10", "cpd": 0.01019129, "dpc": 98.122976, "diamond": 1854328, "currency": 18898.0}, {"date": "2026-05-11", "cpd": 0.01033341, "dpc": 96.773438, "diamond": 1065282, "currency": 11008.0}, {"date": "2026-05-12", "cpd": 0.00992645, "dpc": 100.740907, "diamond": 919563, "currency": 9128.0}, {"date": "2026-05-13", "cpd": 0.01016846, "dpc": 98.34335, "diamond": 998185, "currency": 10150.0}, {"date": "2026-05-14", "cpd": 0.01037219, "dpc": 96.411661, "diamond": 820174, "currency": 8507.0}, {"date": "2026-05-15", "cpd": 0.00979002, "dpc": 102.144833, "diamond": 1004288, "currency": 9832.0}, {"date": "2026-05-16", "cpd": 0.00962272, "dpc": 103.920711, "diamond": 1104885, "currency": 10632.0}, {"date": "2026-05-17", "cpd": 0.00987981, "dpc": 101.216537, "diamond": 963379, "currency": 9518.0}, {"date": "2026-05-18", "cpd": 0.00986935, "dpc": 101.323839, "diamond": 924884, "currency": 9128.0}, {"date": "2026-05-19", "cpd": 0.00963592, "dpc": 103.77839, "diamond": 1035397, "currency": 9977.0}, {"date": "2026-05-20", "cpd": 0.00937321, "dpc": 106.687017, "diamond": 842294, "currency": 7895.0}, {"date": "2026-05-21", "cpd": 0.00960731, "dpc": 104.087458, "diamond": 1074703, "currency": 10325.0}, {"date": "2026-05-22", "cpd": 0.00943826, "dpc": 105.951784, "diamond": 659232, "currency": 6222.0}, {"date": "2026-05-23", "cpd": 0.0095832, "dpc": 104.349264, "diamond": 956361, "currency": 9165.0}, {"date": "2026-05-24", "cpd": 0.00870683, "dpc": 114.852333, "diamond": 927892, "currency": 8079.0}, {"date": "2026-05-25", "cpd": 0.01017965, "dpc": 98.23522, "diamond": 1013591, "currency": 10318.0}, {"date": "2026-05-26", "cpd": 0.00961823, "dpc": 103.969244, "diamond": 618617, "currency": 5950.0}, {"date": "2026-05-27", "cpd": 0.00988303, "dpc": 101.183581, "diamond": 777697, "currency": 7686.0}, {"date": "2026-05-28", "cpd": 0.00879004, "dpc": 113.765178, "diamond": 850736, "currency": 7478.0}, {"date": "2026-05-29", "cpd": 0.00939708, "dpc": 106.416043, "diamond": 880912, "currency": 8278.0}, {"date": "2026-05-30", "cpd": 0.00961175, "dpc": 104.039375, "diamond": 911593, "currency": 8762.0}, {"date": "2026-05-31", "cpd": 0.01006328, "dpc": 99.371135, "diamond": 2574408, "currency": 25907.0}], "SGD": [{"date": "2026-01-01", "cpd": 0.00306236, "dpc": 326.545979, "diamond": 452756, "currency": 1386.5}, {"date": "2026-01-02", "cpd": 0.00309777, "dpc": 322.812464, "diamond": 567698, "currency": 1758.6}, {"date": "2026-01-03", "cpd": 0.00310532, "dpc": 322.028081, "diamond": 784396, "currency": 2435.8}, {"date": "2026-01-04", "cpd": 0.00292185, "dpc": 342.2486, "diamond": 1045193, "currency": 3053.9}, {"date": "2026-01-05", "cpd": 0.00270928, "dpc": 369.101085, "diamond": 1190351, "currency": 3225.0}, {"date": "2026-01-06", "cpd": 0.00314, "dpc": 318.471145, "diamond": 504936, "currency": 1585.5}, {"date": "2026-01-07", "cpd": 0.0030514, "dpc": 327.718877, "diamond": 683130, "currency": 2084.5}, {"date": "2026-01-08", "cpd": 0.00306214, "dpc": 326.569495, "diamond": 830107, "currency": 2541.9}, {"date": "2026-01-09", "cpd": 0.00311992, "dpc": 320.520869, "diamond": 740275, "currency": 2309.6}, {"date": "2026-01-10", "cpd": 0.00301473, "dpc": 331.70508, "diamond": 683611, "currency": 2060.9}, {"date": "2026-01-11", "cpd": 0.00332963, "dpc": 300.333389, "diamond": 179269, "currency": 596.9}, {"date": "2026-01-12", "cpd": 0.00318579, "dpc": 313.893757, "diamond": 347449, "currency": 1106.9}, {"date": "2026-01-13", "cpd": 0.00316184, "dpc": 316.271709, "diamond": 502619, "currency": 1589.2}, {"date": "2026-01-14", "cpd": 0.00290144, "dpc": 344.65677, "diamond": 691864, "currency": 2007.4}, {"date": "2026-01-15", "cpd": 0.00304746, "dpc": 328.142411, "diamond": 703242, "currency": 2143.1}, {"date": "2026-01-16", "cpd": 0.00307866, "dpc": 324.816749, "diamond": 746234, "currency": 2297.4}, {"date": "2026-01-17", "cpd": 0.00306753, "dpc": 325.995682, "diamond": 815413, "currency": 2501.3}, {"date": "2026-01-18", "cpd": 0.00314115, "dpc": 318.35511, "diamond": 438566, "currency": 1377.6}, {"date": "2026-01-19", "cpd": 0.00305932, "dpc": 326.869607, "diamond": 681850, "currency": 2086.0}, {"date": "2026-01-20", "cpd": 0.00296789, "dpc": 336.939615, "diamond": 1277237, "currency": 3790.7}, {"date": "2026-01-21", "cpd": 0.00312594, "dpc": 319.903786, "diamond": 714857, "currency": 2234.6}, {"date": "2026-01-22", "cpd": 0.00295684, "dpc": 338.198512, "diamond": 699868, "currency": 2069.4}, {"date": "2026-01-23", "cpd": 0.00294804, "dpc": 339.208202, "diamond": 1267214, "currency": 3735.8}, {"date": "2026-01-24", "cpd": 0.0031156, "dpc": 320.965508, "diamond": 463410, "currency": 1443.8}, {"date": "2026-01-25", "cpd": 0.00289107, "dpc": 345.892642, "diamond": 458792, "currency": 1326.4}, {"date": "2026-01-26", "cpd": 0.00301369, "dpc": 331.819193, "diamond": 656272, "currency": 1977.8}, {"date": "2026-01-27", "cpd": 0.00296114, "dpc": 337.707219, "diamond": 536583, "currency": 1588.9}, {"date": "2026-01-28", "cpd": 0.00289701, "dpc": 345.183673, "diamond": 710388, "currency": 2058.0}, {"date": "2026-01-29", "cpd": 0.00296065, "dpc": 337.764097, "diamond": 600781, "currency": 1778.7}, {"date": "2026-01-30", "cpd": 0.00292792, "dpc": 341.538976, "diamond": 766755, "currency": 2245.0}, {"date": "2026-01-31", "cpd": 0.00292694, "dpc": 341.653167, "diamond": 708657, "currency": 2074.2}, {"date": "2026-02-01", "cpd": 0.00304101, "dpc": 328.83834, "diamond": 304307, "currency": 925.4}, {"date": "2026-02-02", "cpd": 0.00293857, "dpc": 340.301652, "diamond": 1339087, "currency": 3935.0}, {"date": "2026-02-03", "cpd": 0.00286739, "dpc": 348.748824, "diamond": 1185746, "currency": 3400.0}, {"date": "2026-02-04", "cpd": 0.00286726, "dpc": 348.765556, "diamond": 697845, "currency": 2000.9}, {"date": "2026-02-05", "cpd": 0.00298901, "dpc": 334.558787, "diamond": 670690, "currency": 2004.7}, {"date": "2026-02-06", "cpd": 0.00304951, "dpc": 327.921945, "diamond": 867124, "currency": 2644.3}, {"date": "2026-02-07", "cpd": 0.00307418, "dpc": 325.289554, "diamond": 775718, "currency": 2384.7}, {"date": "2026-02-08", "cpd": 0.00306232, "dpc": 326.549699, "diamond": 439242, "currency": 1345.1}, {"date": "2026-02-09", "cpd": 0.00289532, "dpc": 345.384691, "diamond": 1048657, "currency": 3036.2}, {"date": "2026-02-10", "cpd": 0.00277748, "dpc": 360.038664, "diamond": 1098802, "currency": 3051.9}, {"date": "2026-02-11", "cpd": 0.00300272, "dpc": 333.030945, "diamond": 1179529, "currency": 3541.8}, {"date": "2026-02-12", "cpd": 0.00292836, "dpc": 341.487757, "diamond": 842382, "currency": 2466.8}, {"date": "2026-02-13", "cpd": 0.00276365, "dpc": 361.839837, "diamond": 1809163, "currency": 4999.9}, {"date": "2026-02-14", "cpd": 0.00292011, "dpc": 342.453243, "diamond": 1190162, "currency": 3475.4}, {"date": "2026-02-15", "cpd": 0.00281956, "dpc": 354.665068, "diamond": 1286583, "currency": 3627.6}, {"date": "2026-02-16", "cpd": 0.00270865, "dpc": 369.187751, "diamond": 1297215, "currency": 3513.7}, {"date": "2026-02-17", "cpd": 0.00271118, "dpc": 368.842761, "diamond": 955797, "currency": 2591.34}, {"date": "2026-02-18", "cpd": 0.00272716, "dpc": 366.681519, "diamond": 1135686, "currency": 3097.2}, {"date": "2026-02-19", "cpd": 0.00292094, "dpc": 342.355911, "diamond": 770359, "currency": 2250.17}, {"date": "2026-02-20", "cpd": 0.00301151, "dpc": 332.059133, "diamond": 851300, "currency": 2563.7}, {"date": "2026-02-21", "cpd": 0.00290721, "dpc": 343.972173, "diamond": 756498, "currency": 2199.3}, {"date": "2026-02-22", "cpd": 0.00275155, "dpc": 363.431696, "diamond": 1498865, "currency": 4124.2}, {"date": "2026-02-23", "cpd": 0.0029547, "dpc": 338.443476, "diamond": 637086, "currency": 1882.4}, {"date": "2026-02-24", "cpd": 0.00297391, "dpc": 336.258122, "diamond": 605500, "currency": 1800.7}, {"date": "2026-02-25", "cpd": 0.00246208, "dpc": 406.161462, "diamond": 3482997, "currency": 8575.4}, {"date": "2026-02-26", "cpd": 0.00294694, "dpc": 339.334848, "diamond": 716777, "currency": 2112.3}, {"date": "2026-02-27", "cpd": 0.00292036, "dpc": 342.423397, "diamond": 1263919, "currency": 3691.1}, {"date": "2026-02-28", "cpd": 0.00307728, "dpc": 324.962662, "diamond": 726714, "currency": 2236.3}, {"date": "2026-03-01", "cpd": 0.00251075, "dpc": 398.286753, "diamond": 3723782, "currency": 9349.5}, {"date": "2026-03-02", "cpd": 0.0028453, "dpc": 351.456868, "diamond": 1064598, "currency": 3029.1}, {"date": "2026-03-03", "cpd": 0.00302212, "dpc": 330.893273, "diamond": 979411, "currency": 2959.9}, {"date": "2026-03-04", "cpd": 0.00305347, "dpc": 327.496404, "diamond": 705853, "currency": 2155.3}, {"date": "2026-03-05", "cpd": 0.00278969, "dpc": 358.463013, "diamond": 1309322, "currency": 3652.6}, {"date": "2026-03-06", "cpd": 0.00307074, "dpc": 325.654554, "diamond": 559214, "currency": 1717.2}, {"date": "2026-03-07", "cpd": 0.00294638, "dpc": 339.399304, "diamond": 692137, "currency": 2039.3}, {"date": "2026-03-08", "cpd": 0.00304595, "dpc": 328.30498, "diamond": 899293, "currency": 2739.2}, {"date": "2026-03-09", "cpd": 0.00309706, "dpc": 322.886975, "diamond": 626207, "currency": 1939.4}, {"date": "2026-03-10", "cpd": 0.00287128, "dpc": 348.277181, "diamond": 810441, "currency": 2327.0}, {"date": "2026-03-11", "cpd": 0.00301043, "dpc": 332.178543, "diamond": 839083, "currency": 2526.0}, {"date": "2026-03-12", "cpd": 0.00293408, "dpc": 340.822419, "diamond": 559460, "currency": 1641.5}, {"date": "2026-03-13", "cpd": 0.00306797, "dpc": 325.948918, "diamond": 450494, "currency": 1382.1}, {"date": "2026-03-14", "cpd": 0.00303632, "dpc": 329.34571, "diamond": 947330, "currency": 2876.4}, {"date": "2026-03-15", "cpd": 0.00296256, "dpc": 337.545956, "diamond": 1149479, "currency": 3405.4}, {"date": "2026-03-16", "cpd": 0.00287367, "dpc": 347.987476, "diamond": 1083633, "currency": 3114.0}, {"date": "2026-03-17", "cpd": 0.00301001, "dpc": 332.225168, "diamond": 538836, "currency": 1621.9}, {"date": "2026-03-18", "cpd": 0.00302063, "dpc": 331.056803, "diamond": 827013, "currency": 2498.1}, {"date": "2026-03-19", "cpd": 0.00298331, "dpc": 335.19841, "diamond": 1028858, "currency": 3069.4}, {"date": "2026-03-20", "cpd": 0.00292313, "dpc": 342.099018, "diamond": 602539, "currency": 1761.3}, {"date": "2026-03-21", "cpd": 0.00298517, "dpc": 334.989763, "diamond": 768969, "currency": 2295.5}, {"date": "2026-03-22", "cpd": 0.00300576, "dpc": 332.694429, "diamond": 1116090, "currency": 3354.7}, {"date": "2026-03-23", "cpd": 0.00298833, "dpc": 334.634766, "diamond": 737100, "currency": 2202.7}, {"date": "2026-03-24", "cpd": 0.00300325, "dpc": 332.972146, "diamond": 968283, "currency": 2908.0}, {"date": "2026-03-25", "cpd": 0.0028053, "dpc": 356.467926, "diamond": 1039710, "currency": 2916.7}, {"date": "2026-03-26", "cpd": 0.00304704, "dpc": 328.187736, "diamond": 826869, "currency": 2519.5}, {"date": "2026-03-27", "cpd": 0.00287361, "dpc": 347.993918, "diamond": 1052786, "currency": 3025.3}, {"date": "2026-03-28", "cpd": 0.00301473, "dpc": 331.704312, "diamond": 953086, "currency": 2873.3}, {"date": "2026-03-29", "cpd": 0.00298851, "dpc": 334.614899, "diamond": 847613, "currency": 2533.1}, {"date": "2026-03-30", "cpd": 0.0028234, "dpc": 354.182848, "diamond": 950308, "currency": 2683.1}, {"date": "2026-03-31", "cpd": 0.00280298, "dpc": 356.763358, "diamond": 848633, "currency": 2378.7}, {"date": "2026-04-01", "cpd": 0.00295117, "dpc": 338.848935, "diamond": 684136, "currency": 2019.0}, {"date": "2026-04-02", "cpd": 0.00301158, "dpc": 332.05108, "diamond": 548648, "currency": 1652.3}, {"date": "2026-04-03", "cpd": 0.00289825, "dpc": 345.035817, "diamond": 611714, "currency": 1772.9}, {"date": "2026-04-04", "cpd": 0.00304988, "dpc": 327.881293, "diamond": 705994, "currency": 2153.2}, {"date": "2026-04-05", "cpd": 0.00309135, "dpc": 323.482965, "diamond": 882041, "currency": 2726.7}, {"date": "2026-04-06", "cpd": 0.00288732, "dpc": 346.3425, "diamond": 1164923, "currency": 3363.5}, {"date": "2026-04-07", "cpd": 0.00292461, "dpc": 341.925643, "diamond": 860832, "currency": 2517.6}, {"date": "2026-04-08", "cpd": 0.00278116, "dpc": 359.561869, "diamond": 1279429, "currency": 3558.3}, {"date": "2026-04-09", "cpd": 0.00295037, "dpc": 338.940741, "diamond": 1566618, "currency": 4622.1}, {"date": "2026-04-10", "cpd": 0.00307424, "dpc": 325.284125, "diamond": 593611, "currency": 1824.9}, {"date": "2026-04-11", "cpd": 0.00291598, "dpc": 342.938453, "diamond": 933307, "currency": 2721.5}, {"date": "2026-04-12", "cpd": 0.00277774, "dpc": 360.004815, "diamond": 1271105, "currency": 3530.8}, {"date": "2026-04-13", "cpd": 0.00297537, "dpc": 336.09263, "diamond": 708248, "currency": 2107.3}, {"date": "2026-04-14", "cpd": 0.00298369, "dpc": 335.155312, "diamond": 508196, "currency": 1516.3}, {"date": "2026-04-15", "cpd": 0.00293536, "dpc": 340.673638, "diamond": 1009927, "currency": 2964.5}, {"date": "2026-04-16", "cpd": 0.00292765, "dpc": 341.571253, "diamond": 665859, "currency": 1949.4}, {"date": "2026-04-17", "cpd": 0.00291422, "dpc": 343.144717, "diamond": 690716, "currency": 2012.9}, {"date": "2026-04-18", "cpd": 0.00303002, "dpc": 330.031335, "diamond": 800458, "currency": 2425.4}, {"date": "2026-04-19", "cpd": 0.00295817, "dpc": 338.047071, "diamond": 390681, "currency": 1155.7}, {"date": "2026-04-20", "cpd": 0.00275101, "dpc": 363.503365, "diamond": 2025259, "currency": 5571.5}, {"date": "2026-04-21", "cpd": 0.00271266, "dpc": 368.641577, "diamond": 822808, "currency": 2232.0}, {"date": "2026-04-22", "cpd": 0.00304288, "dpc": 328.636025, "diamond": 705713, "currency": 2147.4}, {"date": "2026-04-23", "cpd": 0.00267046, "dpc": 374.466896, "diamond": 3094894, "currency": 8264.8}, {"date": "2026-04-24", "cpd": 0.00250842, "dpc": 398.658098, "diamond": 4283661, "currency": 10745.2}, {"date": "2026-04-25", "cpd": 0.00250986, "dpc": 398.429243, "diamond": 4240084, "currency": 10642.0}, {"date": "2026-04-26", "cpd": 0.00281814, "dpc": 354.844231, "diamond": 530776, "currency": 1495.8}, {"date": "2026-04-27", "cpd": 0.00290478, "dpc": 344.25968, "diamond": 1061628, "currency": 3083.8}, {"date": "2026-04-28", "cpd": 0.00284517, "dpc": 351.47312, "diamond": 583832, "currency": 1661.1}, {"date": "2026-04-29", "cpd": 0.0024446, "dpc": 409.064856, "diamond": 3819684, "currency": 9337.6}, {"date": "2026-04-30", "cpd": 0.00247747, "dpc": 403.637727, "diamond": 4011715, "currency": 9938.9}, {"date": "2026-05-01", "cpd": 0.0026335, "dpc": 379.723523, "diamond": 1532754, "currency": 4036.5}, {"date": "2026-05-02", "cpd": 0.00285176, "dpc": 350.66055, "diamond": 802662, "currency": 2289.0}, {"date": "2026-05-03", "cpd": 0.00293046, "dpc": 341.243397, "diamond": 1007760, "currency": 2953.2}, {"date": "2026-05-04", "cpd": 0.00289728, "dpc": 345.151832, "diamond": 659240, "currency": 1910.0}, {"date": "2026-05-05", "cpd": 0.0026697, "dpc": 374.574259, "diamond": 915010, "currency": 2442.8}, {"date": "2026-05-06", "cpd": 0.00277979, "dpc": 359.738876, "diamond": 1205449, "currency": 3350.9}, {"date": "2026-05-07", "cpd": 0.0028742, "dpc": 347.92322, "diamond": 1083920, "currency": 3115.4}, {"date": "2026-05-08", "cpd": 0.00291968, "dpc": 342.503413, "diamond": 828002, "currency": 2417.5}, {"date": "2026-05-09", "cpd": 0.00281288, "dpc": 355.507381, "diamond": 919982, "currency": 2587.8}, {"date": "2026-05-10", "cpd": 0.00299946, "dpc": 333.392884, "diamond": 660618, "currency": 1981.5}, {"date": "2026-05-11", "cpd": 0.00286943, "dpc": 348.501799, "diamond": 1026756, "currency": 2946.2}, {"date": "2026-05-12", "cpd": 0.00277526, "dpc": 360.326048, "diamond": 1106237, "currency": 3070.1}, {"date": "2026-05-13", "cpd": 0.0029074, "dpc": 343.95028, "diamond": 1057028, "currency": 3073.2}, {"date": "2026-05-14", "cpd": 0.0029483, "dpc": 339.178434, "diamond": 660550, "currency": 1947.5}, {"date": "2026-05-15", "cpd": 0.00260868, "dpc": 383.336316, "diamond": 2827527, "currency": 7376.1}, {"date": "2026-05-16", "cpd": 0.00285273, "dpc": 350.542005, "diamond": 1223006, "currency": 3488.9}, {"date": "2026-05-17", "cpd": 0.0029933, "dpc": 334.079041, "diamond": 560451, "currency": 1677.6}, {"date": "2026-05-18", "cpd": 0.00267457, "dpc": 373.891195, "diamond": 2026752, "currency": 5420.7}, {"date": "2026-05-19", "cpd": 0.00276844, "dpc": 361.214569, "diamond": 1229755, "currency": 3404.5}, {"date": "2026-05-20", "cpd": 0.00271264, "dpc": 368.644335, "diamond": 2686385, "currency": 7287.2}, {"date": "2026-05-21", "cpd": 0.00285707, "dpc": 350.008762, "diamond": 1158424, "currency": 3309.7}, {"date": "2026-05-22", "cpd": 0.00268706, "dpc": 372.15417, "diamond": 1327660, "currency": 3567.5}, {"date": "2026-05-23", "cpd": 0.00303838, "dpc": 329.122807, "diamond": 816060, "currency": 2479.5}, {"date": "2026-05-24", "cpd": 0.00292206, "dpc": 342.224893, "diamond": 939510, "currency": 2745.3}, {"date": "2026-05-25", "cpd": 0.00290391, "dpc": 344.363589, "diamond": 1308926, "currency": 3801.0}, {"date": "2026-05-26", "cpd": 0.00287968, "dpc": 347.260813, "diamond": 503424, "currency": 1449.7}, {"date": "2026-05-27", "cpd": 0.00280794, "dpc": 356.133341, "diamond": 1887756, "currency": 5300.7}, {"date": "2026-05-28", "cpd": 0.00273052, "dpc": 366.231083, "diamond": 1609256, "currency": 4394.1}, {"date": "2026-05-29", "cpd": 0.00258433, "dpc": 386.948086, "diamond": 3580005, "currency": 9251.9}, {"date": "2026-05-30", "cpd": 0.00278844, "dpc": 358.623185, "diamond": 1462035, "currency": 4076.8}, {"date": "2026-05-31", "cpd": 0.00277154, "dpc": 360.809736, "diamond": 2276962, "currency": 6310.7}], "TWD": [{"date": "2026-01-01", "cpd": 0.0644974, "dpc": 15.5045, "diamond": 64384422, "currency": 4152628.0}, {"date": "2026-01-02", "cpd": 0.06694124, "dpc": 14.938475, "diamond": 37752140, "currency": 2527175.0}, {"date": "2026-01-03", "cpd": 0.06581927, "dpc": 15.193118, "diamond": 45595474, "currency": 3001061.0}, {"date": "2026-01-04", "cpd": 0.06491422, "dpc": 15.404945, "diamond": 50812686, "currency": 3298466.0}, {"date": "2026-01-05", "cpd": 0.06567462, "dpc": 15.226583, "diamond": 50933286, "currency": 3345024.0}, {"date": "2026-01-06", "cpd": 0.0663825, "dpc": 15.064211, "diamond": 48691642, "currency": 3232273.0}, {"date": "2026-01-07", "cpd": 0.066512, "dpc": 15.034881, "diamond": 48330122, "currency": 3214533.0}, {"date": "2026-01-08", "cpd": 0.06518954, "dpc": 15.339884, "diamond": 50365227, "currency": 3283286.0}, {"date": "2026-01-09", "cpd": 0.06511791, "dpc": 15.356758, "diamond": 55818162, "currency": 3634762.0}, {"date": "2026-01-10", "cpd": 0.06615532, "dpc": 15.115942, "diamond": 54882978, "currency": 3630801.0}, {"date": "2026-01-11", "cpd": 0.06516915, "dpc": 15.344683, "diamond": 56961779, "currency": 3712151.0}, {"date": "2026-01-12", "cpd": 0.06438539, "dpc": 15.531475, "diamond": 57861919, "currency": 3725462.0}, {"date": "2026-01-13", "cpd": 0.06608872, "dpc": 15.131176, "diamond": 51543095, "currency": 3406417.0}, {"date": "2026-01-14", "cpd": 0.06513231, "dpc": 15.353364, "diamond": 53780685, "currency": 3502860.0}, {"date": "2026-01-15", "cpd": 0.06441341, "dpc": 15.524718, "diamond": 57452960, "currency": 3700741.0}, {"date": "2026-01-16", "cpd": 0.0641024, "dpc": 15.60004, "diamond": 65608135, "currency": 4205639.0}, {"date": "2026-01-17", "cpd": 0.06484784, "dpc": 15.420713, "diamond": 61954767, "currency": 4017633.0}, {"date": "2026-01-18", "cpd": 0.06435358, "dpc": 15.539151, "diamond": 60538573, "currency": 3895874.0}, {"date": "2026-01-19", "cpd": 0.06431452, "dpc": 15.548588, "diamond": 61172654, "currency": 3934290.0}, {"date": "2026-01-20", "cpd": 0.06259764, "dpc": 15.975043, "diamond": 82521706, "currency": 5165664.0}, {"date": "2026-01-21", "cpd": 0.06419357, "dpc": 15.577885, "diamond": 57604385, "currency": 3697831.0}, {"date": "2026-01-22", "cpd": 0.06547017, "dpc": 15.274131, "diamond": 52792682, "currency": 3456346.0}, {"date": "2026-01-23", "cpd": 0.06549894, "dpc": 15.267423, "diamond": 45565456, "currency": 2984489.0}, {"date": "2026-01-24", "cpd": 0.06428669, "dpc": 15.55532, "diamond": 53252208, "currency": 3423408.0}, {"date": "2026-01-25", "cpd": 0.06485273, "dpc": 15.419552, "diamond": 51336424, "currency": 3329307.0}, {"date": "2026-01-26", "cpd": 0.06427625, "dpc": 15.557846, "diamond": 53281251, "currency": 3424719.0}, {"date": "2026-01-27", "cpd": 0.06540577, "dpc": 15.289171, "diamond": 47457372, "currency": 3103986.0}, {"date": "2026-01-28", "cpd": 0.06553231, "dpc": 15.259648, "diamond": 49865463, "currency": 3267799.0}, {"date": "2026-01-29", "cpd": 0.06438055, "dpc": 15.53264, "diamond": 51712198, "currency": 3329260.0}, {"date": "2026-01-30", "cpd": 0.06378019, "dpc": 15.67885, "diamond": 49263667, "currency": 3142046.0}, {"date": "2026-01-31", "cpd": 0.06267251, "dpc": 15.955959, "diamond": 61654304, "currency": 3864030.0}, {"date": "2026-02-01", "cpd": 0.0655749, "dpc": 15.249736, "diamond": 54767613, "currency": 3591381.0}, {"date": "2026-02-02", "cpd": 0.06428496, "dpc": 15.555738, "diamond": 53811932, "currency": 3459298.0}, {"date": "2026-02-03", "cpd": 0.06400716, "dpc": 15.623252, "diamond": 58624487, "currency": 3752387.0}, {"date": "2026-02-04", "cpd": 0.06386688, "dpc": 15.657567, "diamond": 56675193, "currency": 3619668.0}, {"date": "2026-02-05", "cpd": 0.06409961, "dpc": 15.600719, "diamond": 61531482, "currency": 3944144.0}, {"date": "2026-02-06", "cpd": 0.06556173, "dpc": 15.2528, "diamond": 60002013, "currency": 3933836.0}, {"date": "2026-02-07", "cpd": 0.06527199, "dpc": 15.320508, "diamond": 61986697, "currency": 4045995.0}, {"date": "2026-02-08", "cpd": 0.06368071, "dpc": 15.703342, "diamond": 70305952, "currency": 4477133.0}, {"date": "2026-02-09", "cpd": 0.06443061, "dpc": 15.520573, "diamond": 62288295, "currency": 4013273.0}, {"date": "2026-02-10", "cpd": 0.06507536, "dpc": 15.3668, "diamond": 66334912, "currency": 4316768.0}, {"date": "2026-02-11", "cpd": 0.06328051, "dpc": 15.802655, "diamond": 75184734, "currency": 4757728.0}, {"date": "2026-02-12", "cpd": 0.06491477, "dpc": 15.404814, "diamond": 57803932, "currency": 3752329.0}, {"date": "2026-02-13", "cpd": 0.06384704, "dpc": 15.662434, "diamond": 72042248, "currency": 4599684.0}, {"date": "2026-02-14", "cpd": 0.06493169, "dpc": 15.400799, "diamond": 85273610, "currency": 5536960.0}, {"date": "2026-02-15", "cpd": 0.06586707, "dpc": 15.182094, "diamond": 71203019, "currency": 4689934.0}, {"date": "2026-02-16", "cpd": 0.06390624, "dpc": 15.647924, "diamond": 85153342, "currency": 5441830.0}, {"date": "2026-02-17", "cpd": 0.06151081, "dpc": 16.257304, "diamond": 89223222, "currency": 5488193.0}, {"date": "2026-02-18", "cpd": 0.06320625, "dpc": 15.82122, "diamond": 69549593, "currency": 4395969.0}, {"date": "2026-02-19", "cpd": 0.06209963, "dpc": 16.103156, "diamond": 70172289, "currency": 4357673.0}, {"date": "2026-02-20", "cpd": 0.06500838, "dpc": 15.382633, "diamond": 70730132, "currency": 4598051.0}, {"date": "2026-02-21", "cpd": 0.06554322, "dpc": 15.257109, "diamond": 71234450, "currency": 4668935.0}, {"date": "2026-02-22", "cpd": 0.06560574, "dpc": 15.242568, "diamond": 78099061, "currency": 5123747.0}, {"date": "2026-02-23", "cpd": 0.06446895, "dpc": 15.511343, "diamond": 82029103, "currency": 5288330.0}, {"date": "2026-02-24", "cpd": 0.06577189, "dpc": 15.204064, "diamond": 50832871, "currency": 3343374.0}, {"date": "2026-02-25", "cpd": 0.06590798, "dpc": 15.172669, "diamond": 51163331, "currency": 3372072.0}, {"date": "2026-02-26", "cpd": 0.06314417, "dpc": 15.836774, "diamond": 66643346, "currency": 4208139.0}, {"date": "2026-02-27", "cpd": 0.06572952, "dpc": 15.213864, "diamond": 60349627, "currency": 3966752.0}, {"date": "2026-02-28", "cpd": 0.06368929, "dpc": 15.701226, "diamond": 63373761, "currency": 4036230.0}, {"date": "2026-03-01", "cpd": 0.06446149, "dpc": 15.513138, "diamond": 73948354, "currency": 4766821.0}, {"date": "2026-03-02", "cpd": 0.06443754, "dpc": 15.518903, "diamond": 56115282, "currency": 3615931.0}, {"date": "2026-03-03", "cpd": 0.06439884, "dpc": 15.52823, "diamond": 55853894, "currency": 3596926.0}, {"date": "2026-03-04", "cpd": 0.06519009, "dpc": 15.339754, "diamond": 57852226, "currency": 3771392.0}, {"date": "2026-03-05", "cpd": 0.0635284, "dpc": 15.740992, "diamond": 75577746, "currency": 4801333.0}, {"date": "2026-03-06", "cpd": 0.06483444, "dpc": 15.4239, "diamond": 64009016, "currency": 4149989.0}, {"date": "2026-03-07", "cpd": 0.0657001, "dpc": 15.220677, "diamond": 67016413, "currency": 4402985.0}, {"date": "2026-03-08", "cpd": 0.06553998, "dpc": 15.257861, "diamond": 59635031, "currency": 3908479.0}, {"date": "2026-03-09", "cpd": 0.06530093, "dpc": 15.313718, "diamond": 62938954, "currency": 4109972.0}, {"date": "2026-03-10", "cpd": 0.06490387, "dpc": 15.407401, "diamond": 59587276, "currency": 3867445.0}, {"date": "2026-03-11", "cpd": 0.0658435, "dpc": 15.187529, "diamond": 54975635, "currency": 3619788.0}, {"date": "2026-03-12", "cpd": 0.06405122, "dpc": 15.612504, "diamond": 68362378, "currency": 4378694.0}, {"date": "2026-03-13", "cpd": 0.06340411, "dpc": 15.771848, "diamond": 64156975, "currency": 4067816.0}, {"date": "2026-03-14", "cpd": 0.06371782, "dpc": 15.694196, "diamond": 74116015, "currency": 4722511.0}, {"date": "2026-03-15", "cpd": 0.06623385, "dpc": 15.09802, "diamond": 63355050, "currency": 4196249.0}, {"date": "2026-03-16", "cpd": 0.06438692, "dpc": 15.531104, "diamond": 73005074, "currency": 4700572.0}, {"date": "2026-03-17", "cpd": 0.06476692, "dpc": 15.439981, "diamond": 67271534, "currency": 4356970.0}, {"date": "2026-03-18", "cpd": 0.06580967, "dpc": 15.195334, "diamond": 53623302, "currency": 3528932.0}, {"date": "2026-03-19", "cpd": 0.06587826, "dpc": 15.179515, "diamond": 50831808, "currency": 3348711.0}, {"date": "2026-03-20", "cpd": 0.06600558, "dpc": 15.150235, "diamond": 52287946, "currency": 3451296.0}, {"date": "2026-03-21", "cpd": 0.06369545, "dpc": 15.699708, "diamond": 59954059, "currency": 3818801.0}, {"date": "2026-03-22", "cpd": 0.06512912, "dpc": 15.354115, "diamond": 57094277, "currency": 3718500.0}, {"date": "2026-03-23", "cpd": 0.06593378, "dpc": 15.166733, "diamond": 46000580, "currency": 3032992.0}, {"date": "2026-03-24", "cpd": 0.06439354, "dpc": 15.529508, "diamond": 53188021, "currency": 3424965.0}, {"date": "2026-03-25", "cpd": 0.0654674, "dpc": 15.274778, "diamond": 47746969, "currency": 3125870.0}, {"date": "2026-03-26", "cpd": 0.06507173, "dpc": 15.367657, "diamond": 49506199, "currency": 3221454.0}, {"date": "2026-03-27", "cpd": 0.06375691, "dpc": 15.684573, "diamond": 54445844, "currency": 3471299.0}, {"date": "2026-03-28", "cpd": 0.06522999, "dpc": 15.330373, "diamond": 51771834, "currency": 3377076.0}, {"date": "2026-03-29", "cpd": 0.06479821, "dpc": 15.432525, "diamond": 55194118, "currency": 3576480.0}, {"date": "2026-03-30", "cpd": 0.06352549, "dpc": 15.741713, "diamond": 56324951, "currency": 3578070.0}, {"date": "2026-03-31", "cpd": 0.06386852, "dpc": 15.657166, "diamond": 53965117, "currency": 3446672.0}, {"date": "2026-04-01", "cpd": 0.06418986, "dpc": 15.578786, "diamond": 66284866, "currency": 4254816.0}, {"date": "2026-04-02", "cpd": 0.06561837, "dpc": 15.239635, "diamond": 55759357, "currency": 3658838.0}, {"date": "2026-04-03", "cpd": 0.06522916, "dpc": 15.330567, "diamond": 65972427, "currency": 4303326.0}, {"date": "2026-04-04", "cpd": 0.06551303, "dpc": 15.264138, "diamond": 68223601, "currency": 4469535.0}, {"date": "2026-04-05", "cpd": 0.06551102, "dpc": 15.264609, "diamond": 63541986, "currency": 4162700.0}, {"date": "2026-04-06", "cpd": 0.06418644, "dpc": 15.579616, "diamond": 98412724, "currency": 6316762.0}, {"date": "2026-04-07", "cpd": 0.06594311, "dpc": 15.164587, "diamond": 57219125, "currency": 3773207.0}, {"date": "2026-04-08", "cpd": 0.06454859, "dpc": 15.492205, "diamond": 58017827, "currency": 3744969.0}, {"date": "2026-04-09", "cpd": 0.06525106, "dpc": 15.325421, "diamond": 61533083, "currency": 4015099.0}, {"date": "2026-04-10", "cpd": 0.06433557, "dpc": 15.543501, "diamond": 63648787, "currency": 4094881.0}, {"date": "2026-04-11", "cpd": 0.06510264, "dpc": 15.360359, "diamond": 60708702, "currency": 3952297.0}, {"date": "2026-04-12", "cpd": 0.06676241, "dpc": 14.978489, "diamond": 52056630, "currency": 3475426.0}, {"date": "2026-04-13", "cpd": 0.06485321, "dpc": 15.419436, "diamond": 61010176, "currency": 3956706.0}, {"date": "2026-04-14", "cpd": 0.06581471, "dpc": 15.194172, "diamond": 55909221, "currency": 3679649.0}, {"date": "2026-04-15", "cpd": 0.06444844, "dpc": 15.51628, "diamond": 64347921, "currency": 4147123.0}, {"date": "2026-04-16", "cpd": 0.06601257, "dpc": 15.14863, "diamond": 54824348, "currency": 3619096.0}, {"date": "2026-04-17", "cpd": 0.06576293, "dpc": 15.206135, "diamond": 50796962, "currency": 3340557.0}, {"date": "2026-04-18", "cpd": 0.06334875, "dpc": 15.78563, "diamond": 63523932, "currency": 4024162.0}, {"date": "2026-04-19", "cpd": 0.06402679, "dpc": 15.618463, "diamond": 61402768, "currency": 3931422.0}, {"date": "2026-04-20", "cpd": 0.06395956, "dpc": 15.634879, "diamond": 59135520, "currency": 3782282.0}, {"date": "2026-04-21", "cpd": 0.06485847, "dpc": 15.418186, "diamond": 52849318, "currency": 3427726.0}, {"date": "2026-04-22", "cpd": 0.06582404, "dpc": 15.192018, "diamond": 61482584, "currency": 4047032.0}, {"date": "2026-04-23", "cpd": 0.0643871, "dpc": 15.531061, "diamond": 66628440, "currency": 4290012.0}, {"date": "2026-04-24", "cpd": 0.06227856, "dpc": 16.05689, "diamond": 74615952, "currency": 4646974.0}, {"date": "2026-04-25", "cpd": 0.06440499, "dpc": 15.526748, "diamond": 62052492, "currency": 3996490.0}, {"date": "2026-04-26", "cpd": 0.06349279, "dpc": 15.74982, "diamond": 60703507, "currency": 3854235.0}, {"date": "2026-04-27", "cpd": 0.06394965, "dpc": 15.637302, "diamond": 57530900, "currency": 3679081.0}, {"date": "2026-04-28", "cpd": 0.06468746, "dpc": 15.458946, "diamond": 57873225, "currency": 3743672.0}, {"date": "2026-04-29", "cpd": 0.06457907, "dpc": 15.484893, "diamond": 58861778, "currency": 3801239.0}, {"date": "2026-04-30", "cpd": 0.0642745, "dpc": 15.558269, "diamond": 63608722, "currency": 4088419.0}, {"date": "2026-05-01", "cpd": 0.06206226, "dpc": 16.112852, "diamond": 96542733, "currency": 5991660.0}, {"date": "2026-05-02", "cpd": 0.06238456, "dpc": 16.029608, "diamond": 82875252, "currency": 5170136.0}, {"date": "2026-05-03", "cpd": 0.06432046, "dpc": 15.547154, "diamond": 71806970, "currency": 4618657.0}, {"date": "2026-05-04", "cpd": 0.06434413, "dpc": 15.541433, "diamond": 57155360, "currency": 3677612.0}, {"date": "2026-05-05", "cpd": 0.06562522, "dpc": 15.238045, "diamond": 52246151, "currency": 3428665.0}, {"date": "2026-05-06", "cpd": 0.06358956, "dpc": 15.725851, "diamond": 74619681, "currency": 4745033.0}, {"date": "2026-05-07", "cpd": 0.06547076, "dpc": 15.273994, "diamond": 59712013, "currency": 3909391.0}, {"date": "2026-05-08", "cpd": 0.06625488, "dpc": 15.093228, "diamond": 57608664, "currency": 3816855.0}, {"date": "2026-05-09", "cpd": 0.0646919, "dpc": 15.457886, "diamond": 62407349, "currency": 4037250.0}, {"date": "2026-05-10", "cpd": 0.06531675, "dpc": 15.310009, "diamond": 53930271, "currency": 3522550.0}, {"date": "2026-05-11", "cpd": 0.06475112, "dpc": 15.443749, "diamond": 65249995, "currency": 4225010.0}, {"date": "2026-05-12", "cpd": 0.0631364, "dpc": 15.838724, "diamond": 64136346, "currency": 4049338.0}, {"date": "2026-05-13", "cpd": 0.06386035, "dpc": 15.659169, "diamond": 57536499, "currency": 3674301.0}, {"date": "2026-05-14", "cpd": 0.06419205, "dpc": 15.578252, "diamond": 59917276, "currency": 3846213.0}, {"date": "2026-05-15", "cpd": 0.06288365, "dpc": 15.902384, "diamond": 73639185, "currency": 4630701.0}, {"date": "2026-05-16", "cpd": 0.06269216, "dpc": 15.950958, "diamond": 80502090, "currency": 5046850.0}, {"date": "2026-05-17", "cpd": 0.06423614, "dpc": 15.567562, "diamond": 58811057, "currency": 3777795.0}, {"date": "2026-05-18", "cpd": 0.06319795, "dpc": 15.823299, "diamond": 63813403, "currency": 4032876.0}, {"date": "2026-05-19", "cpd": 0.0622354, "dpc": 16.068026, "diamond": 80338010, "currency": 4999868.0}, {"date": "2026-05-20", "cpd": 0.06346515, "dpc": 15.756678, "diamond": 76944540, "currency": 4883297.0}, {"date": "2026-05-21", "cpd": 0.06328419, "dpc": 15.801736, "diamond": 74408714, "currency": 4708895.0}, {"date": "2026-05-22", "cpd": 0.06204617, "dpc": 16.117031, "diamond": 69413472, "currency": 4306840.0}, {"date": "2026-05-23", "cpd": 0.06226981, "dpc": 16.059146, "diamond": 79871110, "currency": 4973559.0}, {"date": "2026-05-24", "cpd": 0.06456371, "dpc": 15.488578, "diamond": 58330960, "currency": 3766063.0}, {"date": "2026-05-25", "cpd": 0.06457635, "dpc": 15.485545, "diamond": 50181821, "currency": 3240559.0}, {"date": "2026-05-26", "cpd": 0.06458938, "dpc": 15.482421, "diamond": 51426193, "currency": 3321586.0}, {"date": "2026-05-27", "cpd": 0.06297441, "dpc": 15.879466, "diamond": 59198791, "currency": 3728009.0}, {"date": "2026-05-28", "cpd": 0.06242084, "dpc": 16.020292, "diamond": 60284262, "currency": 3762994.0}, {"date": "2026-05-29", "cpd": 0.06362883, "dpc": 15.716146, "diamond": 59756684, "currency": 3802248.0}, {"date": "2026-05-30", "cpd": 0.06269284, "dpc": 15.950784, "diamond": 76197709, "currency": 4777051.0}, {"date": "2026-05-31", "cpd": 0.06286258, "dpc": 15.907716, "diamond": 77771026, "currency": 4888887.0}], "USD": [{"date": "2026-01-01", "cpd": 0.00185447, "dpc": 539.23801, "diamond": 1722612, "currency": 3194.53}, {"date": "2026-01-02", "cpd": 0.00225159, "dpc": 444.129862, "diamond": 473740, "currency": 1066.67}, {"date": "2026-01-03", "cpd": 0.00220733, "dpc": 453.035559, "diamond": 774496, "currency": 1709.57}, {"date": "2026-01-04", "cpd": 0.00206623, "dpc": 483.973032, "diamond": 1808946, "currency": 3737.7}, {"date": "2026-01-05", "cpd": 0.00184682, "dpc": 541.471138, "diamond": 3999739, "currency": 7386.8}, {"date": "2026-01-06", "cpd": 0.00210725, "dpc": 474.551933, "diamond": 1033427, "currency": 2177.69}, {"date": "2026-01-07", "cpd": 0.00200631, "dpc": 498.426391, "diamond": 3652339, "currency": 7327.74}, {"date": "2026-01-08", "cpd": 0.00225707, "dpc": 443.051476, "diamond": 633475, "currency": 1429.8}, {"date": "2026-01-09", "cpd": 0.00211037, "dpc": 473.850198, "diamond": 2191832, "currency": 4625.58}, {"date": "2026-01-10", "cpd": 0.00184837, "dpc": 541.01776, "diamond": 3553805, "currency": 6568.74}, {"date": "2026-01-11", "cpd": 0.0019394, "dpc": 515.622561, "diamond": 4770839, "currency": 9252.58}, {"date": "2026-01-12", "cpd": 0.00204334, "dpc": 489.39521, "diamond": 2690504, "currency": 5497.61}, {"date": "2026-01-13", "cpd": 0.00204791, "dpc": 488.303277, "diamond": 1255291, "currency": 2570.72}, {"date": "2026-01-14", "cpd": 0.00214144, "dpc": 466.976257, "diamond": 1190103, "currency": 2548.53}, {"date": "2026-01-15", "cpd": 0.00185194, "dpc": 539.975734, "diamond": 3911946, "currency": 7244.67}, {"date": "2026-01-16", "cpd": 0.00196393, "dpc": 509.18384, "diamond": 374077, "currency": 734.66}, {"date": "2026-01-17", "cpd": 0.00187672, "dpc": 532.843372, "diamond": 4282297, "currency": 8036.69}, {"date": "2026-01-18", "cpd": 0.00218865, "dpc": 456.903344, "diamond": 779404, "currency": 1705.84}, {"date": "2026-01-19", "cpd": 0.00206506, "dpc": 484.247056, "diamond": 1849601, "currency": 3819.54}, {"date": "2026-01-20", "cpd": 0.001898, "dpc": 526.871199, "diamond": 4095628, "currency": 7773.49}, {"date": "2026-01-21", "cpd": 0.00229703, "dpc": 435.344582, "diamond": 596261, "currency": 1369.63}, {"date": "2026-01-22", "cpd": 0.00224292, "dpc": 445.847835, "diamond": 1013265, "currency": 2272.67}, {"date": "2026-01-23", "cpd": 0.0018806, "dpc": 531.74572, "diamond": 5869271, "currency": 11037.74}, {"date": "2026-01-24", "cpd": 0.00236976, "dpc": 421.984479, "diamond": 306673, "currency": 726.74}, {"date": "2026-01-25", "cpd": 0.0020596, "dpc": 485.532139, "diamond": 590242, "currency": 1215.66}, {"date": "2026-01-26", "cpd": 0.00219468, "dpc": 455.647092, "diamond": 961265, "currency": 2109.67}, {"date": "2026-01-27", "cpd": 0.00208689, "dpc": 479.182713, "diamond": 460370, "currency": 960.74}, {"date": "2026-01-28", "cpd": 0.002323, "dpc": 430.477562, "diamond": 1010658, "currency": 2347.76}, {"date": "2026-01-29", "cpd": 0.00184647, "dpc": 541.573907, "diamond": 5617562, "currency": 10372.66}, {"date": "2026-01-30", "cpd": 0.00186917, "dpc": 534.996956, "diamond": 4077062, "currency": 7620.72}, {"date": "2026-01-31", "cpd": 0.00199829, "dpc": 500.429032, "diamond": 2540448, "currency": 5076.54}, {"date": "2026-02-01", "cpd": 0.00218164, "dpc": 458.370327, "diamond": 1742944, "currency": 3802.48}, {"date": "2026-02-02", "cpd": 0.00203782, "dpc": 490.720887, "diamond": 2030922, "currency": 4138.65}, {"date": "2026-02-03", "cpd": 0.002147, "dpc": 465.767223, "diamond": 1684014, "currency": 3615.57}, {"date": "2026-02-04", "cpd": 0.00235083, "dpc": 425.381424, "diamond": 254276, "currency": 597.76}, {"date": "2026-02-05", "cpd": 0.0022019, "dpc": 454.152982, "diamond": 1315059, "currency": 2895.63}, {"date": "2026-02-06", "cpd": 0.00208887, "dpc": 478.727574, "diamond": 2134967, "currency": 4459.67}, {"date": "2026-02-07", "cpd": 0.00186694, "dpc": 535.63479, "diamond": 3520074, "currency": 6571.78}, {"date": "2026-02-08", "cpd": 0.00216926, "dpc": 460.986171, "diamond": 1175358, "currency": 2549.66}, {"date": "2026-02-09", "cpd": 0.00217947, "dpc": 458.827007, "diamond": 838176, "currency": 1826.78}, {"date": "2026-02-10", "cpd": 0.00212634, "dpc": 470.292551, "diamond": 2063940, "currency": 4388.63}, {"date": "2026-02-11", "cpd": 0.00215228, "dpc": 464.624557, "diamond": 1468957, "currency": 3161.6}, {"date": "2026-02-12", "cpd": 0.0018859, "dpc": 530.251988, "diamond": 2213696, "currency": 4174.8}, {"date": "2026-02-13", "cpd": 0.00220307, "dpc": 453.911515, "diamond": 717970, "currency": 1581.74}, {"date": "2026-02-14", "cpd": 0.00185889, "dpc": 537.955915, "diamond": 4224358, "currency": 7852.61}, {"date": "2026-02-15", "cpd": 0.00188972, "dpc": 529.177843, "diamond": 3973353, "currency": 7508.54}, {"date": "2026-02-16", "cpd": 0.00186464, "dpc": 536.296116, "diamond": 4013978, "currency": 7484.63}, {"date": "2026-02-17", "cpd": 0.00135041, "dpc": 740.515753, "diamond": 712154, "currency": 961.7}, {"date": "2026-02-18", "cpd": 0.00181276, "dpc": 551.645401, "diamond": 9295556, "currency": 16850.6}, {"date": "2026-02-19", "cpd": 0.00190007, "dpc": 526.295534, "diamond": 4220106, "currency": 8018.51}, {"date": "2026-02-20", "cpd": 0.00193769, "dpc": 516.079095, "diamond": 3604059, "currency": 6983.54}, {"date": "2026-02-21", "cpd": 0.00171089, "dpc": 584.492323, "diamond": 472036, "currency": 807.6}, {"date": "2026-02-22", "cpd": 0.00213738, "dpc": 467.862878, "diamond": 2208528, "currency": 4720.46}, {"date": "2026-02-23", "cpd": 0.00184107, "dpc": 543.162352, "diamond": 8632778, "currency": 15893.55}, {"date": "2026-02-24", "cpd": 0.00198276, "dpc": 504.346503, "diamond": 5668658, "currency": 11239.61}, {"date": "2026-02-25", "cpd": 0.00224652, "dpc": 445.132695, "diamond": 485070, "currency": 1089.72}, {"date": "2026-02-26", "cpd": 0.00190643, "dpc": 524.540539, "diamond": 1721883, "currency": 3282.65}, {"date": "2026-02-27", "cpd": 0.00186082, "dpc": 537.396497, "diamond": 6429761, "currency": 11964.65}, {"date": "2026-02-28", "cpd": 0.0020808, "dpc": 480.585219, "diamond": 1616953, "currency": 3364.55}, {"date": "2026-03-01", "cpd": 0.00187517, "dpc": 533.28362, "diamond": 4094237, "currency": 7677.41}, {"date": "2026-03-02", "cpd": 0.00190559, "dpc": 524.772247, "diamond": 4048938, "currency": 7715.61}, {"date": "2026-03-03", "cpd": 0.00218401, "dpc": 457.872968, "diamond": 791525, "currency": 1728.7}, {"date": "2026-03-04", "cpd": 0.00221784, "dpc": 450.888445, "diamond": 566627, "currency": 1256.69}, {"date": "2026-03-05", "cpd": 9.311e-05, "dpc": 10740.455487, "diamond": 14464064, "currency": 1346.69}, {"date": "2026-03-06", "cpd": 0.0018303, "dpc": 546.358675, "diamond": 6932554, "currency": 12688.65}, {"date": "2026-03-07", "cpd": 0.00167588, "dpc": 596.701778, "diamond": 4400968, "currency": 7375.49}, {"date": "2026-03-08", "cpd": 0.00188526, "dpc": 530.430524, "diamond": 4608635, "currency": 8688.48}, {"date": "2026-03-09", "cpd": 0.00210695, "dpc": 474.619538, "diamond": 697966, "currency": 1470.58}, {"date": "2026-03-10", "cpd": 0.00213821, "dpc": 467.680278, "diamond": 430640, "currency": 920.8}, {"date": "2026-03-11", "cpd": 0.00186388, "dpc": 536.516276, "diamond": 1503104, "currency": 2801.6}, {"date": "2026-03-12", "cpd": 0.00192093, "dpc": 520.581222, "diamond": 5108349, "currency": 9812.78}, {"date": "2026-03-13", "cpd": 0.002151, "dpc": 464.900855, "diamond": 1696744, "currency": 3649.69}, {"date": "2026-03-14", "cpd": 0.00182259, "dpc": 548.669999, "diamond": 7289882, "currency": 13286.46}, {"date": "2026-03-15", "cpd": 0.0018561, "dpc": 538.765021, "diamond": 3378353, "currency": 6270.55}, {"date": "2026-03-16", "cpd": 0.0017754, "dpc": 563.252118, "diamond": 5199155, "currency": 9230.6}, {"date": "2026-03-17", "cpd": 0.00173877, "dpc": 575.120757, "diamond": 4381615, "currency": 7618.6}, {"date": "2026-03-18", "cpd": 0.00196998, "dpc": 507.618175, "diamond": 3018653, "currency": 5946.7}, {"date": "2026-03-19", "cpd": 0.00086262, "dpc": 1159.261319, "diamond": 8378851, "currency": 7227.75}, {"date": "2026-03-20", "cpd": 0.00164826, "dpc": 606.700783, "diamond": 8531299, "currency": 14061.79}, {"date": "2026-03-21", "cpd": 0.00184683, "dpc": 541.469116, "diamond": 11425973, "currency": 21101.8}, {"date": "2026-03-22", "cpd": 0.0019519, "dpc": 512.321004, "diamond": 4687563, "currency": 9149.66}, {"date": "2026-03-23", "cpd": 0.00120761, "dpc": 828.084163, "diamond": 22950129, "currency": 27714.73}, {"date": "2026-03-24", "cpd": 0.00232949, "dpc": 429.27909, "diamond": 276357, "currency": 643.77}, {"date": "2026-03-25", "cpd": 0.00194391, "dpc": 514.428301, "diamond": 2652274, "currency": 5155.77}, {"date": "2026-03-26", "cpd": 0.00186207, "dpc": 537.037479, "diamond": 3373460, "currency": 6281.61}, {"date": "2026-03-27", "cpd": 0.00194095, "dpc": 515.211869, "diamond": 2374967, "currency": 4609.69}, {"date": "2026-03-28", "cpd": 0.00180135, "dpc": 555.139023, "diamond": 3272972, "currency": 5895.77}, {"date": "2026-03-29", "cpd": 0.00174539, "dpc": 572.938047, "diamond": 7736159, "currency": 13502.61}, {"date": "2026-03-30", "cpd": 0.00173867, "dpc": 575.152623, "diamond": 3834393, "currency": 6666.74}, {"date": "2026-03-31", "cpd": 0.00168282, "dpc": 594.241467, "diamond": 14092270, "currency": 23714.72}, {"date": "2026-04-01", "cpd": 0.00224682, "dpc": 445.073635, "diamond": 1520149, "currency": 3415.5}, {"date": "2026-04-02", "cpd": 0.00192312, "dpc": 519.987256, "diamond": 1207764, "currency": 2322.68}, {"date": "2026-04-03", "cpd": 0.00183544, "dpc": 544.82838, "diamond": 6411317, "currency": 11767.59}, {"date": "2026-04-04", "cpd": 0.00188174, "dpc": 531.422237, "diamond": 6074390, "currency": 11430.44}, {"date": "2026-04-05", "cpd": 0.00188958, "dpc": 529.216969, "diamond": 4303386, "currency": 8131.61}, {"date": "2026-04-06", "cpd": 0.00205768, "dpc": 485.984654, "diamond": 1728419, "currency": 3556.53}, {"date": "2026-04-07", "cpd": 0.00201138, "dpc": 497.170731, "diamond": 1463079, "currency": 2942.81}, {"date": "2026-04-08", "cpd": 0.00186326, "dpc": 536.693498, "diamond": 5562651, "currency": 10364.67}, {"date": "2026-04-09", "cpd": 0.00199258, "dpc": 501.861209, "diamond": 1111467, "currency": 2214.69}, {"date": "2026-04-10", "cpd": 0.00184011, "dpc": 543.446962, "diamond": 7068957, "currency": 13007.63}, {"date": "2026-04-11", "cpd": 0.00180274, "dpc": 554.711966, "diamond": 571786, "currency": 1030.78}, {"date": "2026-04-12", "cpd": 0.00179251, "dpc": 557.875559, "diamond": 546573, "currency": 979.74}, {"date": "2026-04-13", "cpd": 0.00194254, "dpc": 514.790706, "diamond": 4692168, "currency": 9114.71}, {"date": "2026-04-14", "cpd": 0.00219056, "dpc": 456.504856, "diamond": 1025141, "currency": 2245.63}, {"date": "2026-04-15", "cpd": 0.00185215, "dpc": 539.912326, "diamond": 4217131, "currency": 7810.77}, {"date": "2026-04-16", "cpd": 0.00182762, "dpc": 547.16008, "diamond": 3239029, "currency": 5919.71}, {"date": "2026-04-17", "cpd": 0.00203664, "dpc": 491.004919, "diamond": 1153783, "currency": 2349.84}, {"date": "2026-04-18", "cpd": 0.00183842, "dpc": 543.945002, "diamond": 3624175, "currency": 6662.76}, {"date": "2026-04-19", "cpd": 0.0021022, "dpc": 475.691515, "diamond": 2087596, "currency": 4388.55}, {"date": "2026-04-20", "cpd": 0.00190474, "dpc": 525.007327, "diamond": 3815559, "currency": 7267.63}, {"date": "2026-04-21", "cpd": 0.00192523, "dpc": 519.41715, "diamond": 4196153, "currency": 8078.58}, {"date": "2026-04-22", "cpd": 0.00167472, "dpc": 597.116503, "diamond": 7245752, "currency": 12134.57}, {"date": "2026-04-23", "cpd": 0.00193003, "dpc": 518.126476, "diamond": 2406112, "currency": 4643.87}, {"date": "2026-04-24", "cpd": 0.0013249, "dpc": 754.77307, "diamond": 1252244, "currency": 1659.1}, {"date": "2026-04-25", "cpd": 0.00189658, "dpc": 527.264622, "diamond": 3802759, "currency": 7212.24}, {"date": "2026-04-26", "cpd": 0.00228003, "dpc": 438.591151, "diamond": 866007, "currency": 1974.52}, {"date": "2026-04-27", "cpd": 0.00178206, "dpc": 561.149638, "diamond": 8916303, "currency": 15889.35}, {"date": "2026-04-28", "cpd": 0.00197209, "dpc": 507.076423, "diamond": 3079825, "currency": 6073.69}, {"date": "2026-04-29", "cpd": 0.00225141, "dpc": 444.16622, "diamond": 405848, "currency": 913.73}, {"date": "2026-04-30", "cpd": 0.00184574, "dpc": 541.788942, "diamond": 6549952, "currency": 12089.49}, {"date": "2026-05-01", "cpd": 0.00223286, "dpc": 447.856444, "diamond": 1406005, "currency": 3139.41}, {"date": "2026-05-02", "cpd": 0.00165306, "dpc": 604.94052, "diamond": 15765736, "currency": 26061.63}, {"date": "2026-05-03", "cpd": 0.00195063, "dpc": 512.653686, "diamond": 2460102, "currency": 4798.76}, {"date": "2026-05-04", "cpd": 0.00189166, "dpc": 528.637082, "diamond": 3831551, "currency": 7247.98}, {"date": "2026-05-05", "cpd": 0.002343, "dpc": 426.803089, "diamond": 412343, "currency": 966.12}, {"date": "2026-05-06", "cpd": 0.00186331, "dpc": 536.679137, "diamond": 3579140, "currency": 6669.05}, {"date": "2026-05-07", "cpd": 0.00210529, "dpc": 474.994981, "diamond": 638778, "currency": 1344.81}, {"date": "2026-05-08", "cpd": 0.00188312, "dpc": 531.034487, "diamond": 4178875, "currency": 7869.31}, {"date": "2026-05-09", "cpd": 0.00189878, "dpc": 526.655065, "diamond": 3782858, "currency": 7182.8}, {"date": "2026-05-10", "cpd": 0.00200442, "dpc": 498.897136, "diamond": 2938564, "currency": 5890.12}, {"date": "2026-05-11", "cpd": 0.00188202, "dpc": 531.343536, "diamond": 4463562, "currency": 8400.52}, {"date": "2026-05-12", "cpd": 0.00233594, "dpc": 428.093943, "diamond": 552665, "currency": 1290.99}, {"date": "2026-05-13", "cpd": 0.00185775, "dpc": 538.286978, "diamond": 3360967, "currency": 6243.82}, {"date": "2026-05-14", "cpd": 0.00221463, "dpc": 451.542742, "diamond": 1090557, "currency": 2415.18}, {"date": "2026-05-15", "cpd": 0.00185247, "dpc": 539.820945, "diamond": 5283789, "currency": 9788.04}, {"date": "2026-05-16", "cpd": 0.00186774, "dpc": 535.406874, "diamond": 3655378, "currency": 6827.29}, {"date": "2026-05-17", "cpd": 0.00194621, "dpc": 513.818749, "diamond": 2514742, "currency": 4894.22}, {"date": "2026-05-18", "cpd": 0.00208395, "dpc": 479.85876, "diamond": 610865, "currency": 1273.01}, {"date": "2026-05-19", "cpd": 0.00186615, "dpc": 535.862273, "diamond": 4349085, "currency": 8116.05}, {"date": "2026-05-20", "cpd": 0.00225632, "dpc": 443.198936, "diamond": 1366338, "currency": 3082.9}, {"date": "2026-05-21", "cpd": 0.00195614, "dpc": 511.21117, "diamond": 5077288, "currency": 9931.88}, {"date": "2026-05-22", "cpd": 0.00207225, "dpc": 482.567947, "diamond": 2654780, "currency": 5501.36}, {"date": "2026-05-23", "cpd": 0.00222063, "dpc": 450.323236, "diamond": 811523, "currency": 1802.09}, {"date": "2026-05-24", "cpd": 0.0019094, "dpc": 523.723968, "diamond": 9946508, "currency": 18991.89}, {"date": "2026-05-25", "cpd": 0.00217181, "dpc": 460.446329, "diamond": 444013, "currency": 964.31}, {"date": "2026-05-26", "cpd": 0.00187513, "dpc": 533.295625, "diamond": 3842091, "currency": 7204.43}, {"date": "2026-05-27", "cpd": 0.00215745, "dpc": 463.509192, "diamond": 1121924, "currency": 2420.5}, {"date": "2026-05-28", "cpd": 0.00214891, "dpc": 465.353111, "diamond": 837966, "currency": 1800.71}, {"date": "2026-05-29", "cpd": 0.00185161, "dpc": 540.070119, "diamond": 3407432, "currency": 6309.24}, {"date": "2026-05-30", "cpd": 0.00199957, "dpc": 500.106682, "diamond": 5320685, "currency": 10639.1}, {"date": "2026-05-31", "cpd": 0.00207747, "dpc": 481.354465, "diamond": 11246746, "currency": 23364.79}]};
+
+const CUR_COLORS = {
+  AUD: '#4fc3f7', HKD: '#ce93d8', JPY: '#69f0ae',
+  MYR: '#ffca28', SGD: '#ff8a65', TWD: '#f06292', USD: '#80cbc4'
+};
+
+let charts = {};
+
+function getFilteredData() {
+  const cur = document.getElementById('cur-select').value;
+  const month = document.getElementById('month-select').value;
+  let rows = RATIOS[cur] || [];
+  if (month !== 'all') {
+    rows = rows.filter(r => r.date.startsWith(month));
+  }
+  return { cur, rows };
+}
+
+function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function std(arr) {
+  const m = mean(arr);
+  return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length);
+}
+
+function computeStats(rows) {
+  const cpdArr = rows.map(r=>r.cpd);
+  const m = mean(cpdArr);
+  const s = std(cpdArr);
+  const cv = s/m;
+  return { m, s, cv };
+}
+
+function getAnomalies(rows, sigma) {
+  if (!rows.length) return [];
+  const { m, s } = computeStats(rows);
+  return rows.map(r => ({
+    ...r,
+    z: (r.cpd - m) / s
+  })).filter(r => Math.abs(r.z) > sigma);
+}
+
+function fmtNum(v, digits) {
+  if (v === null || v === undefined) return '—';
+  if (v >= 1000) return v.toLocaleString('en', {maximumFractionDigits: 0});
+  if (v >= 1) return v.toFixed(digits || 2);
+  if (v >= 0.01) return v.toFixed(4);
+  if (v >= 0.001) return v.toFixed(5);
+  return v.toFixed(6);
+}
+
+function update() {
+  const { cur, rows } = getFilteredData();
+  const sigma = parseFloat(document.getElementById('sigma-select').value);
+
+  if (!rows.length) return;
+
+  const { m, s, cv } = computeStats(rows);
+  const anomalies = getAnomalies(rows, sigma);
+
+  // KPI cards
+  document.getElementById('kpi-avg-cpd').textContent = fmtNum(m);
+  document.getElementById('kpi-avg-cpd-unit').textContent = `${cur} / Diamond`;
+  const dpcMean = mean(rows.map(r=>r.dpc));
+  document.getElementById('kpi-avg-dpc').textContent = fmtNum(dpcMean);
+  document.getElementById('kpi-avg-dpc-unit').textContent = `Diamond / ${cur}`;
+  document.getElementById('kpi-cv').textContent = (cv*100).toFixed(1) + '%';
+  document.getElementById('kpi-anomaly-count').textContent = anomalies.length;
+  document.getElementById('kpi-anomaly-sigma').textContent = `at ± ${sigma}σ threshold`;
+
+  const labels = rows.map(r => r.date.slice(5)); // MM-DD
+  const cpdVals = rows.map(r => r.cpd);
+  const dpcVals = rows.map(r => r.dpc);
+  const zScores = rows.map(r => (r.cpd - m) / s);
+  const anomalyDates = new Set(anomalies.map(a=>a.date));
+
+  // Anomaly color per point
+  const ptColors = rows.map(r => anomalyDates.has(r.date) ? '#ef5350' : CUR_COLORS[cur]);
+  const ptRadius = rows.map(r => anomalyDates.has(r.date) ? 5 : 3);
+
+  const latestRow = rows[rows.length-1];
+  document.getElementById('cpd-latest').textContent = fmtNum(latestRow.cpd);
+  document.getElementById('dpc-latest').textContent = fmtNum(latestRow.dpc);
+
+  const gridColor = 'rgba(30,37,53,0.8)';
+  const tickColor = '#3d4f6e';
+  const baseFont = { family: "'IBM Plex Mono', monospace", size: 9 };
+
+  // Upper/Lower band lines
+  const upper = rows.map(() => m + sigma*s);
+  const lower = rows.map(() => m - sigma*s);
+  const meanLine = rows.map(() => m);
+
+  // Chart 1: CPD Trend
+  destroyChart('chart-cpd');
+  const ctx1 = document.getElementById('chart-cpd').getContext('2d');
+  charts['chart-cpd'] = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'CPD', data: cpdVals,
+          borderColor: CUR_COLORS[cur], backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: ptRadius, pointBackgroundColor: ptColors,
+          tension: 0.3, order: 1
+        },
+        {
+          label: `+${sigma}σ`, data: upper,
+          borderColor: 'rgba(239,83,80,0.4)', backgroundColor: 'transparent',
+          borderWidth: 1, borderDash: [4,4], pointRadius: 0, order: 2
+        },
+        {
+          label: 'Mean', data: meanLine,
+          borderColor: 'rgba(79,195,247,0.3)', backgroundColor: 'transparent',
+          borderWidth: 1, borderDash: [2,4], pointRadius: 0, order: 3
+        },
+        {
+          label: `-${sigma}σ`, data: lower,
+          borderColor: 'rgba(239,83,80,0.4)', backgroundColor: 'transparent',
+          borderWidth: 1, borderDash: [4,4], pointRadius: 0, order: 4
+        }
+      ]
+    },
+    options: chartOpts('CPD', gridColor, tickColor, baseFont)
+  });
+
+  // Chart 2: DPC Trend
+  const upperDpc = rows.map(() => mean(dpcVals) + sigma*std(dpcVals));
+  const lowerDpc = rows.map(() => mean(dpcVals) - sigma*std(dpcVals));
+  const meanDpc = rows.map(() => mean(dpcVals));
+  const dpcAnomalyColors = rows.map(r => anomalyDates.has(r.date) ? '#ef5350' : CUR_COLORS[cur]);
+
+  destroyChart('chart-dpc');
+  const ctx2 = document.getElementById('chart-dpc').getContext('2d');
+  charts['chart-dpc'] = new Chart(ctx2, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'DPC', data: dpcVals,
+          borderColor: '#ce93d8', backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: ptRadius, pointBackgroundColor: dpcAnomalyColors,
+          tension: 0.3, order: 1
+        },
+        {
+          label: `+${sigma}σ`, data: upperDpc,
+          borderColor: 'rgba(239,83,80,0.4)', backgroundColor: 'transparent',
+          borderWidth: 1, borderDash: [4,4], pointRadius: 0, order: 2
+        },
+        {
+          label: 'Mean', data: meanDpc,
+          borderColor: 'rgba(206,147,216,0.3)', backgroundColor: 'transparent',
+          borderWidth: 1, borderDash: [2,4], pointRadius: 0, order: 3
+        },
+        {
+          label: `-${sigma}σ`, data: lowerDpc,
+          borderColor: 'rgba(239,83,80,0.4)', backgroundColor: 'transparent',
+          borderWidth: 1, borderDash: [4,4], pointRadius: 0, order: 4
+        }
+      ]
+    },
+    options: chartOpts('DPC', gridColor, tickColor, baseFont)
+  });
+
+  // Chart 3: Z-Score
+  const zColors = zScores.map(z => Math.abs(z) > sigma ? '#ef5350' : (z>0 ? 'rgba(79,195,247,0.6)' : 'rgba(206,147,216,0.6)'));
+  destroyChart('chart-zscore');
+  const ctx3 = document.getElementById('chart-zscore').getContext('2d');
+  charts['chart-zscore'] = new Chart(ctx3, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Z-Score', data: zScores,
+        backgroundColor: zColors, borderColor: 'transparent', borderWidth: 0
+      }]
+    },
+    options: {
+      ...chartOpts('Z', gridColor, tickColor, baseFont),
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `z = ${ctx.parsed.y.toFixed(3)}`
+          }
+        }
+      }
+    }
+  });
+
+  // Chart 4: Scatter
+  const scatterData = rows.map(r => ({
+    x: r.currency,
+    y: r.diamond,
+    date: r.date,
+    isAnomaly: anomalyDates.has(r.date)
+  }));
+  const normalPts = scatterData.filter(p=>!p.isAnomaly);
+  const anomalyPts = scatterData.filter(p=>p.isAnomaly);
+
+  destroyChart('chart-scatter');
+  const ctx4 = document.getElementById('chart-scatter').getContext('2d');
+  charts['chart-scatter'] = new Chart(ctx4, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Normal', data: normalPts,
+          backgroundColor: CUR_COLORS[cur]+'80', pointRadius: 3, pointHoverRadius: 5
+        },
+        {
+          label: 'Anomaly', data: anomalyPts,
+          backgroundColor: '#ef535080', borderColor: '#ef5350',
+          borderWidth: 1, pointRadius: 5, pointHoverRadius: 7
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const p = ctx.raw;
+              return [`${p.date}`, `Currency: ${fmtNum(p.x)}`, `Diamond: ${(p.y/1000).toFixed(0)}K`];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: tickColor, font: baseFont, maxTicksLimit: 6 },
+          grid: { color: gridColor }
+        },
+        y: {
+          ticks: {
+            color: tickColor, font: baseFont, maxTicksLimit: 5,
+            callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v
+          },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+
+  // Anomaly table
+  const tbody = document.getElementById('anomaly-tbody');
+  const noAnom = document.getElementById('no-anomalies');
+  tbody.innerHTML = '';
+  document.getElementById('anomaly-count-badge').textContent = anomalies.length + ' 筆';
+
+  if (!anomalies.length) {
+    noAnom.style.display = 'block';
+  } else {
+    noAnom.style.display = 'none';
+    const sorted = [...anomalies].sort((a,b)=>Math.abs(b.z)-Math.abs(a.z));
+    sorted.forEach(a => {
+      const tr = document.createElement('tr');
+      const dir = a.z > 0 ? '↑ 偏高' : '↓ 偏低';
+      const dirColor = a.z > 0 ? '#ef5350' : '#4fc3f7';
+      tr.innerHTML = `
+        <td class="anomaly-date">${a.date}</td>
+        <td><span class="cur-badge cur-${cur}">${cur}</span></td>
+        <td class="anomaly-val">${fmtNum(a.cpd)}</td>
+        <td class="anomaly-zscore">${a.z.toFixed(3)}</td>
+        <td>${(a.diamond/1000).toFixed(0)}K</td>
+        <td>${fmtNum(a.currency)}</td>
+        <td style="color:${dirColor}">${dir}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+function chartOpts(label, gridColor, tickColor, baseFont) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#131720',
+        borderColor: '#1e2535',
+        borderWidth: 1,
+        titleFont: { family: "'IBM Plex Mono', monospace", size: 10 },
+        bodyFont: { family: "'IBM Plex Mono', monospace", size: 10 },
+        titleColor: '#c8d4e8',
+        bodyColor: '#6b7fa0'
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: tickColor, font: baseFont, maxTicksLimit: 8, maxRotation: 0 },
+        grid: { color: gridColor }
+      },
+      y: {
+        ticks: {
+          color: tickColor, font: baseFont, maxTicksLimit: 5,
+          callback: v => {
+            if (v >= 1000) return (v/1000).toFixed(0)+'K';
+            if (v >= 1) return v.toFixed(1);
+            if (v >= 0.001) return v.toFixed(4);
+            return v.toExponential(2);
+          }
+        },
+        grid: { color: gridColor }
+      }
+    }
+  };
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+async function runAiAnalysis() {
+  const { cur, rows } = getFilteredData();
+  const sigma = parseFloat(document.getElementById('sigma-select').value);
+  if (!rows.length) return;
+
+  const { m, s, cv } = computeStats(rows);
+  const anomalies = getAnomalies(rows, sigma);
+  const month = document.getElementById('month-select').value;
+
+  const btn = document.getElementById('ai-btn');
+  const body = document.getElementById('ai-body');
+  btn.disabled = true;
+  body.className = 'ai-body loading';
+  body.textContent = '分析中...';
+
+  const cpdArr = rows.map(r=>r.cpd);
+  const p5 = cpdArr.slice().sort((a,b)=>a-b)[Math.floor(cpdArr.length*0.05)];
+  const p95 = cpdArr.slice().sort((a,b)=>a-b)[Math.floor(cpdArr.length*0.95)];
+
+  const prompt = `你是一位直播平台的數據分析師。請分析以下幣別的鑽石兌換比值數據，找出異常點的可能成因，並給出業務層面的解讀。
+
+幣別: ${cur}
+分析期間: ${month === 'all' ? '2026年1月到5月' : month}
+資料筆數: ${rows.length}
+
+指標定義：
+- CPD (Currency per Diamond) = 當日${cur}收入 ÷ 當日鑽石產出量
+- DPC (Diamond per Currency) = 當日鑽石產出量 ÷ 當日${cur}收入
+
+統計摘要：
+- CPD 均值: ${m.toFixed(6)}
+- CPD 標準差: ${s.toFixed(6)}
+- 變異係數 (CV): ${(cv*100).toFixed(1)}%
+- CPD P5~P95: ${p5.toFixed(6)} ~ ${p95.toFixed(6)}
+
+異常點清單 (|z| > ${sigma}σ，共${anomalies.length}筆)：
+${anomalies.slice(0,10).map(a=>`  ${a.date}: CPD=${a.cpd.toFixed(6)}, z=${a.z.toFixed(3)}, Diamond=${(a.diamond/1000).toFixed(0)}K, ${cur}=${a.currency.toFixed(2)}`).join('\n')}
+
+請用繁體中文，200字以內，分析：
+1. 異常模式的主要特徵
+2. 最可能的業務成因（如特殊活動、幣別波動、大額儲值事件）
+3. 是否需要後續關注
+
+以清晰的段落分點說明，避免廢話。`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || '無法取得分析結果';
+    body.className = 'ai-body';
+    // Convert line breaks to paragraphs
+    body.innerHTML = text.split('\n\n').map(p => `<p>${p.replace(/\n/g,'<br>')}</p>`).join('');
+  } catch(e) {
+    body.className = 'ai-body';
+    body.textContent = '分析失敗：' + e.message;
+  }
+  btn.disabled = false;
+}
+
+document.getElementById('cur-select').addEventListener('change', update);
+document.getElementById('month-select').addEventListener('change', update);
+document.getElementById('sigma-select').addEventListener('change', update);
+
+// Init
+update();
+</script>
+</body>
+</html>
